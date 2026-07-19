@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Matter status column palette (ADR-0029 lexicon status enum). */
+:root {
+  --col-intake: 210 40% 96%;
+  --col-conflictCheck: 48 96% 88%;
+  --col-engaged: 160 70% 85%;
+  --col-filed: 220 85% 85%;
+  --col-hearing: 280 70% 85%;
+  --col-trial: 340 80% 85%;
+  --col-judgment: 30 90% 85%;
+  --col-appeal: 12 85% 88%;
+  --col-execution: 150 60% 82%;
+  --col-closed: 220 8% 86%;
+  --col-archived: 220 6% 78%;
+}

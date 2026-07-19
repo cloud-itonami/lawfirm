@@ -1,0 +1,702 @@
+{
+  "@context": "https://schema.org/",
+  "@type": "Project",
+  "name": "Law Firm (法律事務所)",
+  "status": "Integrated",
+  "identifier": "etzhayyim-project-law-firm",
+  "description": "Legal services integration with AI, focusing on case management, document review, and compliance automation.",
+  "hasPart": [
+    {
+      "@type": "CreativeWork",
+      "name": "Capabilities",
+      "url": "capabilities.jsonld"
+    },
+    {
+      "@type": "CreativeWork",
+      "name": "Activities",
+      "url": "activities.jsonld"
+    },
+    {
+      "@type": "CreativeWork",
+      "name": "Rules",
+      "url": "rules.jsonld"
+    },
+    {
+      "@type": "CreativeWork",
+      "name": "Measures",
+      "url": "measures.jsonld"
+    },
+    {
+      "@type": "CreativeWork",
+      "name": "UI/UX Design",
+      "url": "uiux.jsonld"
+    },
+    {
+      "@type": "CreativeWork",
+      "name": "Strategy",
+      "url": "STRATEGY.jsonld"
+    },
+    {
+      "@type": "CreativeWork",
+      "name": "Test Report",
+      "url": "../../performers/apps/etzhayyim-lawfirm/PROJECT.jsonld"
+    }
+  ],
+  "rdfUnifiedDocuments": {
+    "@type": "Dataset",
+    "name": "Unified top-level RDF/JSON-LD documents",
+    "description": "Consolidated from project top-level *.jsonld files except PROJECT.jsonld.",
+    "documents": [
+      {
+        "fileName": "ACTIVITIES-LEGAL-BPO.jsonld",
+        "content": {
+          "@context": {
+            "dodaf": "http://dodcio.defense.gov/Library/DoDAF.aspx#",
+            "dct": "http://purl.org/dc/terms/",
+            "apqc": "https://www.apqc.org/process-classification-framework",
+            "id": "@id",
+            "type": "@type"
+          },
+          "id": "https://etzhayyim.com/projects/etzhayyim-root/activities/legal-bpo",
+          "type": "dodaf:OperationalActivity",
+          "dct:title": "Legal BPO Operational Flows (OV-5b)",
+          "dct:description": "Fully automated legal and compliance business processes.",
+          "@graph": [
+            {
+              "id": "act:legal:discord_disclosure",
+              "name": "Discord Disclosure Request Flow",
+              "description": "Automated workflow for requesting user info disclosure from Discord Inc.",
+              "performer": "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-apqc-11-0-legal-bmde7ez5",
+              "workflow": "DiscordDisclosureWorkflow",
+              "paymentLink": "https://buy.stripe.com/aFaaEW2O72hqdSU33VbMQ07",
+              "steps": [
+                {
+                  "name": "Evidence Validation",
+                  "activity": "ValidateEvidenceActivity",
+                  "description": "AI-based PII exposure check via Vision API."
+                },
+                {
+                  "name": "Service Provider Identification",
+                  "activity": "IdentifyServiceProviderActivity",
+                  "description": "Determining Discord legal entity for jurisdiction."
+                },
+                {
+                  "name": "Document Reification",
+                  "activity": "GenerateDisclosureRequestActivity",
+                  "description": "Generating DOCX/PDF via CPC 843 Actor."
+                },
+                {
+                  "name": "HAR Legal Review",
+                  "activity": "RequestHumanLegalReviewActivity",
+                  "description": "Escalation to har:persona:legal-reviewer for final approval."
+                }
+              ]
+            },
+            {
+              "id": "act:legal:gaiben_approval",
+              "name": "Autonomous Gaiben Approval Process",
+              "description": "Orchestrates the MoJ approval for foreign special lawyers using AI and Temporal.",
+              "performer": "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-apqc-10-1-gaiben-approval",
+              "steps": [
+                "Document Collection (Applicant info, license proof)",
+                "Translation (via ISCO 2643 Translator Actor)",
+                "Review & Formatting (via Lawfirm Docs Reificator)",
+                "MoJ Portal Submission (via Browser Automation Agent)"
+              ]
+            },
+            {
+              "id": "act:legal:seizure_response",
+              "name": "Autonomous Seizure Notice Response",
+              "description": "Automated handling of bank/government seizure notices.",
+              "performer": "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-apqc-11-0-legal-bmde7ez5",
+              "steps": [
+                "Notice Receipt & OCR (via AI-SEC Mailer + Vision API)",
+                "Legality Review (Legal Actor)",
+                "Impact Assessment (Financial Core Actor)",
+                "Response Dispatch (Objection or Payment Plan)"
+              ]
+            },
+            {
+              "id": "act:legal:jp_asset_seizure_execution",
+              "name": "Japan: Post-Lawsuit Asset Seizure",
+              "description": "Executing asset seizure based on court judgments in Japan.",
+              "performer": "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-apqc-11-0-legal-bmde7ez5",
+              "workflow": "JpAssetSeizureWorkflow",
+              "paymentLink": "https://buy.stripe.com/cNi6oG60j9JS7uw7kbbMQ08",
+              "steps": [
+                "Judgment Analysis (CPC 843 Actor)",
+                "Asset Intelligence (Bank Sync Actor)",
+                "Petition Generation (CPC 843 Actor)",
+                "HAR Legal Review (har:persona:legal-reviewer)",
+                "Court Filing (BPO/Digital)"
+              ]
+            },
+            {
+              "id": "act:legal:in_admin_document_filing",
+              "name": "India: Administrative Document Filing",
+              "description": "Autonomous filing of government identity and legal documents in India.",
+              "performer": "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-in-admin-doc",
+              "workflow": "InAdminDocumentWorkflow",
+              "paymentLink": "https://buy.stripe.com/3cI3cu9cv1dm0240VNbMQ09",
+              "steps": [
+                "Identity Verification (India Admin Service)",
+                "Portal Data Entry (Browser Agent Actor)",
+                "OTP Synchronization (Client Portal interaction)",
+                "Filing Confirmation & Archiving"
+              ]
+            },
+            {
+              "id": "act:legal:in_relocation_utility_transfer",
+              "name": "India: Municipal Utility Relocation",
+              "description": "Autonomous transfer and settlement of water and utility charges in India.",
+              "performer": "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-cofog-0630-in-municipal-utility",
+              "workflow": "InRelocationUtilityWorkflow",
+              "paymentLink": "https://buy.stripe.com/3cI3cu9cv1dm0240VNbMQ09",
+              "steps": [
+                {
+                  "id": "step1",
+                  "name": "Jurisdiction Mapping",
+                  "activity": "IdentifyMunicipalityActivity",
+                  "description": "Resolve jurisdiction based on property address."
+                },
+                {
+                  "id": "step2",
+                  "name": "Document Reification",
+                  "activity": "PrepareApplicationActivity",
+                  "description": "Generate and verify digital application forms."
+                },
+                {
+                  "id": "step3",
+                  "name": "User Validation",
+                  "activity": "UserApprovalActivity",
+                  "description": "Final review of the prepared documents by the client."
+                },
+                {
+                  "id": "step3_ai",
+                  "name": "AI Risk Intelligence",
+                  "activity": "RiskAnalysisActivity",
+                  "description": "Autonomous detection of document inconsistencies, expiry, and legal risks for the lawyer.",
+                  "performer": "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-apqc-11-0-legal-bmde7ez5"
+                },
+                {
+                  "id": "step4",
+                  "name": "Fee Settlement",
+                  "activity": "PaymentProcessingActivity",
+                  "description": "Processing of government fees and service charges."
+                },
+                {
+                  "id": "step5",
+                  "name": "Lawyer Filing",
+                  "activity": "LawyerExecutionActivity",
+                  "description": "Final review and autonomous portal filing performed by a human lawyer aided by Browser Agent.",
+                  "performer": "har:persona:legal-reviewer"
+                }
+              ],
+              "specializedPerformers": [
+                "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-cofog-0630-in-ka-blr-bwssb",
+                "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-cofog-0630-in-dl-del-djb",
+                "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-cofog-0630-in-mh-mum-mcgm",
+                "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-cofog-0630-in-tn-che-cmwssb",
+                "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-cofog-0631-in-ka-blr-bescom",
+                "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-cofog-0631-in-mh-mum-best",
+                "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-cofog-0631-in-dl-del-bses",
+                "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-cofog-0630-in-ts-hyd-hmwssb",
+                "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-cofog-0631-in-ts-hyd-tsspdcl",
+                "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-cofog-0631-in-tn-che-tangedco",
+                "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-cofog-0630-in-gj-amd-amc",
+                "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-cofog-0630-in-wb-kol-kmc",
+                "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-cofog-0610-in-ts-hyd-ghmc",
+                "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-cofog-0610-in-tn-che-gcc",
+                "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-cofog-0630-in-up-lko-lmc",
+                "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-cofog-0630-in-up-knp-kmc",
+                "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-cofog-0630-in-br-pat-pmc",
+                "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-cofog-0630-in-mp-ind-imc",
+                "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-cofog-0630-in-rj-jai-jmc"
+              ],
+              "measures": [
+                {
+                  "type": "SuccessRate",
+                  "target": "98%",
+                  "description": "Filing success rate without human intervention."
+                },
+                {
+                  "type": "MeanTimeToResolution",
+                  "target": "24h",
+                  "description": "Average time from payment to government confirmation."
+                }
+              ]
+            },
+            {
+              "id": "act:legal:in_passport_application",
+              "name": "India: Passport Application",
+              "description": "Autonomous processing of Indian passport via MEA portal.",
+              "performer": "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-in-passport",
+              "steps": [
+                "Application Submission (Passport Seva)",
+                "Fee Payment",
+                "Appointment Scheduling",
+                "Police Verification Orchestration"
+              ]
+            },
+            {
+              "id": "act:legal:in_voter_registration",
+              "name": "India: Voter ID (EPIC) Registration",
+              "description": "Autonomous voter registration via ECI NVSP portal.",
+              "performer": "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-in-voter",
+              "steps": [
+                "Form 6 Submission",
+                "Document Verification",
+                "Booth Level Officer (BLO) Coordination"
+              ]
+            },
+            {
+              "id": "act:legal:in_driving_license_application",
+              "name": "India: Driving License Application",
+              "description": "Autonomous DL issuance/renewal via Sarathi portal.",
+              "performer": "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-in-dl",
+              "steps": [
+                "Learner License Application",
+                "Slot Booking",
+                "Permanent License Conversion"
+              ]
+            },
+            {
+              "id": "act:legal:jp_self_bankruptcy",
+              "name": "Japan: Self-Bankruptcy Procedure (自己破産手続き)",
+              "description": "Autonomous bankruptcy filing workflow with Matrix-based agent consultation and court petition generation.",
+              "performer": "etzhayyim-wasm-isco-bankruptcy-bkzibt0j",
+              "workflow": "JpSelfBankruptcyWorkflow",
+              "steps": [
+                {
+                  "name": "Initial Consultation (初回相談)",
+                  "activity": "BankruptcyConsultationActivity",
+                  "description": "Matrix-based intake: debt status hearing, eligibility assessment via Bankruptcy Counsel agent."
+                },
+                {
+                  "name": "Debt Analysis (債務分析)",
+                  "activity": "DebtAnalysisActivity",
+                  "description": "Creditor list compilation, interest recalculation, total debt verification."
+                },
+                {
+                  "name": "Asset Inventory (資産目録作成)",
+                  "activity": "AssetInventoryActivity",
+                  "description": "Free property identification, non-exempt asset enumeration, valuation."
+                },
+                {
+                  "name": "Eligibility Assessment (免責適格性判定)",
+                  "activity": "EligibilityAssessmentActivity",
+                  "description": "Bankruptcy Act Art.252 discharge bar analysis, insolvency determination."
+                },
+                {
+                  "name": "Petition Drafting (申立書起案)",
+                  "activity": "PetitionDraftingActivity",
+                  "description": "Bankruptcy petition generation with required attachments checklist."
+                },
+                {
+                  "name": "HAR Legal Review (弁護士確認)",
+                  "activity": "RequestHumanLegalReviewActivity",
+                  "description": "Final review by qualified lawyer (ISCO 2611) before court filing."
+                },
+                {
+                  "name": "Court Filing (裁判所提出)",
+                  "activity": "CourtFilingActivity",
+                  "description": "Digital filing to jurisdictional district court."
+                }
+              ]
+            },
+            {
+              "id": "act:legal:jp_individual_rehabilitation",
+              "name": "Japan: Individual Rehabilitation (個人再生)",
+              "description": "Autonomous individual rehabilitation plan workflow for debt restructuring.",
+              "performer": "etzhayyim-wasm-isco-bankruptcy-bkzibt0j",
+              "workflow": "JpIndividualRehabilitationWorkflow",
+              "steps": [
+                "Debt Assessment & Qualification Check",
+                "Rehabilitation Plan Drafting (minimum repayment calculation)",
+                "Creditor Notification via Matrix",
+                "Court Submission & Approval Tracking"
+              ]
+            },
+            {
+              "id": "act:legal:jp_voluntary_arrangement",
+              "name": "Japan: Voluntary Debt Arrangement (任意整理)",
+              "description": "AI-assisted negotiation with creditors for interest reduction and repayment restructuring.",
+              "performer": "etzhayyim-wasm-isco-bankruptcy-bkzibt0j",
+              "workflow": "JpVoluntaryArrangementWorkflow",
+              "steps": [
+                "Acceptance Notice to Creditors (受任通知)",
+                "Interest Recalculation (利息引き直し計算)",
+                "Negotiation Draft Generation",
+                "Settlement Agreement Tracking"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "fileName": "PROJECT-LEGAL-BPO-REPORT.jsonld",
+        "content": {
+          "@context": "https://schema.org/",
+          "@type": "Report",
+          "name": "Legal BPO & RegTech Expansion Report",
+          "description": "Integration report for Lawfirm CMS and autonomous legal actors to dominate the BPO market.",
+          "datePublished": "2026-01-20",
+          "author": {
+            "@type": "Organization",
+            "name": "ETZHAYYIM AI"
+          },
+          "about": [
+            {
+              "@type": "Thing",
+              "name": "Market Opportunity",
+              "description": "Targeting 100B JPY by automating high-barrier legal tasks (Gaiben, Seizure, Compliance)."
+            },
+            {
+              "@type": "Thing",
+              "name": "Technical Integration",
+              "description": "Lawfirm CMS cloned and configured as the central orchestrator for Legal-BMDE7EZ5 and Gaiben-Approval actors."
+            },
+            {
+              "@type": "Thing",
+              "name": "Key Achievements",
+              "description": "Defined Legal BPO Capability, updated activities.jsonld, and implemented BPO Orchestrator workflow."
+            }
+          ]
+        }
+      },
+      {
+        "fileName": "STRATEGY-LEGAL-BPO.jsonld",
+        "content": {
+          "@context": "https://schema.org/",
+          "@type": "Strategy",
+          "name": "Legal BPO & RegTech Autonomous Market Strategy",
+          "description": "Strategic roadmap to dominate the Legal BPO market using ETZHAYYIM OS and Temporal-based autonomous actors.",
+          "identifier": "legal-bpo-strategy",
+          "hasPart": [
+            {
+              "@type": "CreativeWork",
+              "name": "Phase 1: Autonomous Notice Response (Seizure/Compliance)",
+              "description": "Automate the response to government and financial notices using the Legal-BMDE7EZ5 actor.",
+              "status": "In Progress"
+            },
+            {
+              "@type": "CreativeWork",
+              "name": "Phase 2: Global Contract & IP Management",
+              "description": "Offer 'Zero-Human-Touch' contract review and IP renewal as a subscription BPO service.",
+              "status": "Planned"
+            },
+            {
+              "@type": "CreativeWork",
+              "name": "Phase 3: RegTech Marketplace via cross-actor",
+              "description": "Enable Lawfirm CMS to act as a hub for multiple BPO actors, connecting firms with autonomous legal workers.",
+              "status": "Planned"
+            }
+          ],
+          "potentialRevenue": {
+            "@type": "MonetaryAmount",
+            "currency": "JPY",
+            "value": "100000000000",
+            "description": "Targeting 100B JPY market in the Legal/Compliance BPO sector by 2028."
+          }
+        }
+      },
+      {
+        "fileName": "STRATEGY.jsonld",
+        "content": {
+          "@context": {
+            "dodaf": "http://dodcio.defense.gov/Library/DoDAF.aspx#",
+            "dct": "http://purl.org/dc/terms/",
+            "etzhayyim": "https://etzhayyim.com/schemas/"
+          },
+          "id": "https://etzhayyim.com/projects/etzhayyim-project-law-firm/strategy/legal-process-automation",
+          "type": "dodaf:StrategicPlan",
+          "dct:title": "Legal Process Automation Strategy",
+          "dct:description": "Strategic plan to automate routine legal tasks and enhance case management efficiency.",
+          "etzhayyim:objectives": [
+            {
+              "name": "Automated Document Drafting",
+              "description": "Implement AI models for drafting standard legal documents with 95% accuracy.",
+              "priority": "High"
+            },
+            {
+              "name": "Intelligent Case Routing",
+              "description": "Automatically route cases to specialized legal teams based on complexity and subject matter.",
+              "priority": "Medium"
+            }
+          ],
+          "etzhayyim:triggers": [
+            {
+              "condition": "New case intake volume > 10/day",
+              "action": "Trigger 'Automated Intake Scaling' activity."
+            }
+          ]
+        }
+      },
+      {
+        "fileName": "activities.jsonld",
+        "content": {
+          "@context": {
+            "dodaf": "http://dodcio.defense.gov/Library/DoDAF.aspx#",
+            "dct": "http://purl.org/dc/terms/",
+            "etzhayyim": "https://etzhayyim.com/schemas/"
+          },
+          "id": "https://etzhayyim.com/projects/etzhayyim-project-law-firm/activities/legal-operations",
+          "type": "dodaf:OperationalActivity",
+          "dct:title": "Legal Case Management Process (OV-5b)",
+          "dct:description": "Management of legal cases from intake to strategy formulation.",
+          "etzhayyim:steps": [
+            {
+              "activity": "Client Intake",
+              "performer": "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-psn-isco-3411-paralegal",
+              "action": "Collect client information and case details.",
+              "input": "Client Inquiry",
+              "output": "Case Record"
+            },
+            {
+              "activity": "Legal Document Review",
+              "performer": "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-psn-isco-2611-lawyer",
+              "action": "Review relevant legal documents and evidence.",
+              "input": "Case Record",
+              "output": "Document Analysis"
+            },
+            {
+              "activity": "Case Strategy Formulation",
+              "performer": "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-psn-isco-2611-lawyer",
+              "action": "Develop legal strategies and action plans.",
+              "input": "Document Analysis",
+              "output": "Legal Strategy Document"
+            }
+          ]
+        }
+      },
+      {
+        "fileName": "capabilities.jsonld",
+        "content": {
+          "@context": {
+            "dodaf": "http://dodcio.defense.gov/Library/DoDAF.aspx#",
+            "etzhayyim": "https://etzhayyim.com/schemas/"
+          },
+          "@type": "dodaf:Capability",
+          "name": "Legal Case Management",
+          "description": "Ability to manage legal cases, perform research, and develop legal strategies efficiently.",
+          "etzhayyim:actors": [
+            {
+              "@id": "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-psn-isco-3411-paralegal",
+              "name": "Paralegal",
+              "type": "Person",
+              "isco": "3411",
+              "description": "Assists in client intake and document organization."
+            },
+            {
+              "@id": "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-psn-isco-2611-lawyer",
+              "name": "Lawyer",
+              "type": "Person",
+              "isco": "2611",
+              "description": "Handles case strategy, document review, and legal representation."
+            },
+            {
+              "@id": "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-cofog-0310-us-fbi-ic3",
+              "name": "FBI IC3 Crypto Reporter",
+              "type": "Service",
+              "cofog": "0310",
+              "description": "Autonomous US crypto crime reporting."
+            },
+            {
+              "@id": "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-cofog-0310-de-bka-cyber",
+              "name": "Germany BKA Crypto Reporter",
+              "type": "Service",
+              "cofog": "0310",
+              "description": "Autonomous Germany crypto crime reporting."
+            },
+            {
+              "@id": "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-cofog-0310-uk-action-fraud",
+              "name": "UK Action Fraud Reporter",
+              "type": "Service",
+              "cofog": "0310",
+              "description": "Autonomous UK crypto crime reporting."
+            },
+            {
+              "@id": "etzhayyim-performer-sys-etzhayyim-actors-pba7d22f-svc-cofog-0310-jp-npa-cyber",
+              "name": "Japan NPA Crypto Reporter",
+              "type": "Service",
+              "cofog": "0310",
+              "description": "Autonomous Japan crypto crime reporting."
+            },
+            {
+              "@id": "etzhayyim-wasm-isco-bankruptcy-bkzibt0j",
+              "name": "Bankruptcy Counsel (清水 律)",
+              "type": "Person",
+              "isco": "2611",
+              "matrixUser": "@bankruptcy-bkzibt0j:etzhayyim.com",
+              "description": "Bankruptcy law specialist handling self-bankruptcy, individual rehabilitation, voluntary arrangements, and corporate bankruptcy procedures via Matrix protocol."
+            }
+          ],
+          "etzhayyim:features": [
+            "Digital Client Intake",
+            "AI-Assisted Document Review",
+            "Case Strategy Management",
+            "Autonomous Milestone Tracking",
+            "Legal Document Center (ISCO 2611 Verification)",
+            "Autonomous Global Crypto Crime Reporting (COFOG 0310)",
+            "Bankruptcy Procedure Automation (自己破産/個人再生/任意整理)"
+          ]
+        }
+      },
+      {
+        "fileName": "measures.jsonld",
+        "content": {
+          "@context": {
+            "dodaf": "http://dodcio.defense.gov/Library/DoDAF.aspx#",
+            "etzhayyim": "https://etzhayyim.com/schemas/"
+          },
+          "@type": "dodaf:Measure",
+          "name": "Legal Service Performance Measures",
+          "description": "Metrics and KPIs to evaluate the effectiveness of legal case management and AI automation.",
+          "etzhayyim:measures": [
+            {
+              "id": "M-001",
+              "name": "Drafting Accuracy",
+              "metric": "Percentage of AI drafts requiring < 10% manual correction",
+              "target": "95%",
+              "category": "Quality"
+            },
+            {
+              "id": "M-002",
+              "name": "Intake Efficiency",
+              "metric": "Average time from client inquiry to case record creation",
+              "target": "< 1 hour",
+              "category": "Operational"
+            },
+            {
+              "id": "M-003",
+              "name": "Response Time",
+              "metric": "Average response time to client queries via portal",
+              "target": "< 4 hours",
+              "category": "Service"
+            },
+            {
+              "id": "M-004",
+              "name": "Cost Reduction",
+              "metric": "Reduction in operational cost per case through automation",
+              "target": "40%",
+              "category": "Financial"
+            }
+          ]
+        }
+      },
+      {
+        "fileName": "rules.jsonld",
+        "content": {
+          "@context": {
+            "dodaf": "http://dodcio.defense.gov/Library/DoDAF.aspx#",
+            "etzhayyim": "https://etzhayyim.com/schemas/"
+          },
+          "@type": "dodaf:Rule",
+          "name": "Legal Operations Rules",
+          "description": "Operational rules governing legal services and AI integration.",
+          "etzhayyim:rules": [
+            {
+              "id": "RULE-001",
+              "name": "Attorney-Client Privilege",
+              "description": "All client communications and case-related data must be encrypted and accessible only by authorized legal personnel.",
+              "category": "Security"
+            },
+            {
+              "id": "RULE-002",
+              "name": "Data Sovereignty",
+              "description": "Legal data must be stored in compliance with local jurisdiction regulations (e.g., APPI in Japan, IT Act in India).",
+              "category": "Compliance"
+            },
+            {
+              "id": "RULE-003",
+              "name": "AI Verification",
+              "description": "All AI-generated legal drafts must be reviewed and approved by a qualified lawyer (ISCO 2611) before finalization.",
+              "category": "Quality"
+            },
+            {
+              "id": "RULE-004",
+              "name": "Audit Trail",
+              "description": "Every action taken on a case record must be logged with a timestamp and the performer's identity.",
+              "category": "Operational"
+            }
+          ]
+        }
+      },
+      {
+        "fileName": "scheduler.jsonld",
+        "content": {
+          "@context": [
+            "https://schema.org/",
+            {
+              "etzhayyim": "https://etzhayyim.com/schemas/",
+              "capabilities": "etzhayyim:capabilities",
+              "survivalIndicators": "etzhayyim:survivalIndicators",
+              "scheduler": "etzhayyim:scheduler",
+              "milestones": "etzhayyim:milestones",
+              "blockers": "etzhayyim:blockers",
+              "dependsOn": {
+                "@id": "etzhayyim:dependsOn",
+                "@type": "@id"
+              },
+              "ingestKey": "etzhayyim:ingestKey",
+              "window": "etzhayyim:window",
+              "valueUpdatedAt": "etzhayyim:valueUpdatedAt"
+            }
+          ],
+          "@type": "CreativeWork",
+          "name": "Law Firm (法律事務所) Scheduler",
+          "identifier": "etzhayyim-project-law-firm/scheduler",
+          "description": "Project schedule (milestones) and blockers.",
+          "dateCreated": "2026-02-15T04:25:26+00:00",
+          "milestones": [],
+          "blockers": []
+        }
+      },
+      {
+        "fileName": "uiux.jsonld",
+        "content": {
+          "@context": "https://schema.org/",
+          "@type": "CreativeWork",
+          "name": "Law Firm UI/UX Design",
+          "description": "Integrated legal case management and document review interface.",
+          "etzhayyim:designPrinciples": [
+            "Clean, professional typography and layout",
+            "Focus-mode for document review",
+            "Secure communication indicators"
+          ],
+          "etzhayyim:uiComponents": [
+            {
+              "name": "Case Management Board",
+              "type": "Board",
+              "features": [
+                "Active cases list",
+                "Milestone tracking",
+                "Deadlines calendar"
+              ]
+            },
+            {
+              "name": "Legal Document Center",
+              "type": "DocumentViewer",
+              "features": [
+                "AI-summarized content",
+                "Annotation tools",
+                "Version history"
+              ]
+            }
+          ],
+          "etzhayyim:uxFlows": [
+            {
+              "name": "New Case Intake Flow",
+              "steps": [
+                "Register client",
+                "Input case summary",
+                "Upload initial documents",
+                "Assign legal team"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

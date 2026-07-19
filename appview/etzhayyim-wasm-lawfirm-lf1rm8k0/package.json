@@ -1,0 +1,18 @@
+{
+  "name": "etzhayyim-wasm-lawfirm-lf1rm8k0",
+  "version": "0.1.0",
+  "description": "lawfirm.etzhayyim.com — Legal case management + India intake (Hindi / 22 Scheduled Languages, ADR-0018 Tier 3 PII, ADR-0019 path topology, ADR-0029 recursive did:etzhayyim)",
+  "main": "svelte/.svelte-kit/cloudflare/_worker.js",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --dir svelte dev",
+    "build": "pnpm --dir svelte build",
+    "preview": "pnpm --dir svelte preview",
+    "check": "pnpm --dir svelte check",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.8",
+    "vitest": "^4.1.8"
+  }
+}

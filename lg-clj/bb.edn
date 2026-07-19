@@ -1,0 +1,22 @@
+{;; lg-lawfirm-intake — clj-native port of the Python LangGraph server
+ ;; (ADR-2606280030: langgraph-python → langgraph-clj). Scoped to THIS app only
+ ;; (does NOT touch the repo-root bb.edn).
+ ;;
+ ;;   src   — lg-lawfirm-intake.* namespaces (nodes + graph + server)
+ ;;   test  — lg-lawfirm-intake.smoke-test (clojure.test)
+ ;;
+ ;; Run the suite:  bb test   (or:  bb run_tests.clj)
+ ;;
+ ;; The Python FastAPI pod under `lg/` remains the deployed runtime
+ ;; (langgraph.json / Dockerfile / Helm) — this clj twin is ADDITIVE and
+ ;; COEXISTS until a human cuts over.
+ :paths ["src" "test"]
+ :deps {com-junkawasaki/langchain-clj
+        {:git/url "https://github.com/com-junkawasaki/langchain-clj"
+         :git/sha "2b03859c3ee722b64f3eddd0b615a54019b17c81"}
+        com-junkawasaki/langgraph-clj
+        {:git/url "https://github.com/com-junkawasaki/langgraph-clj"
+         :git/sha "c7daa07d4e50f55d7e2a02e4b89dbeb2b200961d"}}
+ :tasks
+ {test {:doc "Run the clojure.test suite under bb."
+        :task (load-file "run_tests.clj")}}}
