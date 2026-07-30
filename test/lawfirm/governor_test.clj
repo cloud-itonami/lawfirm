@@ -1,0 +1,242 @@
+(ns lawfirm.governor-test
+  (:require [clojure.test :refer [deftest is testing]]
+            [lawfirm.fixture :as fx]
+            [lawfirm.governor :as governor]
+            [lawfirm.store :as store]))
+
+(defn- check [s proposal & [request-extra]]
+  (governor/check (merge fx/request-base request-extra) fx/context proposal s))
+
+(defn- rules [v] (set (map :rule (:violations v))))
+
+(def ^:private routine
+  {:op :prepare-work-product :effect :propose :matter-id "M-1"
+   :billable-hours 6 :confidence 0.9
+   :work-product {:doc-id "W-2" :matter-id "M-1" :kind :準備書面}})
+
+(deftest a-clean-routine-proposal-commits
+  (let [v (check (fx/fresh-store) routine)]
+    (is (true? (:ok? v)) (pr-str (:violations v)))
+    (is (false? (:hard? v)))
+    (is (false? (:escalate? v)))))
+
+;; ---------------------------------------------------------------------------
+;; HARD invariants
+;; ---------------------------------------------------------------------------
+
+(deftest hard-1-no-actuation
+  (let [v (check (fx/fresh-store) (assoc routine :effect :execute))]
+    (is (true? (:hard? v)))
+    (is (contains? (rules v) :no-actuation))))
+
+(deftest hard-2-counsel-must-be-verified-and-active
+  (testing "an unregistered person cannot act — 弁護士法72条"
+    (let [v (check (fx/fresh-store) routine {:bengoshi-id "NOBODY"})]
+      (is (true? (:hard? v)))
+      (is (contains? (rules v) :unregistered-counsel))))
+  (testing "業務停止中の弁護士"
+    (let [v (check (fx/fresh-store) routine {:bengoshi-id "B-3"})]
+      (is (contains? (rules v) :counsel-not-active))))
+  (testing "資格確認が1年以上前"
+    (let [v (check (fx/fresh-store) routine {:bengoshi-id "B-4"})]
+      (is (contains? (rules v) :verification-stale)))))
+
+(deftest hard-3-provenance
+  (testing "unknown client"
+    (is (contains? (rules (check (fx/fresh-store) routine {:client-id "C-404"})) :no-client)))
+  (testing "unknown matter"
+    (is (contains? (rules (check (fx/fresh-store) (assoc routine :matter-id "M-404")))
+                   :unknown-matter)))
+  (testing "someone else's matter"
+    (let [s (fx/fresh-store)
+          v (check s routine {:client-id "C-2"})]
+      (is (contains? (rules v) :matter-wrong-client)))))
+
+(deftest hard-4-human-conflict-clearance-is-required
+  (let [s (store/mem-store)]
+    (doseq [b (vals fx/counsel)] (store/register-bengoshi! s b))
+    (store/register-client! s {:client-id "C-1" :name "株式会社甲野商事"})
+    (store/register-matter! s {:matter-id "M-1" :client-id "C-1" :bengoshi-id "B-1"
+                               :status :open :domain "corporate"
+                               :fee-agreement "委任契約書" :max-billable-hours 40})
+    (let [v (check s routine)]
+      (is (true? (:hard? v)))
+      (is (contains? (rules v) :conflict-check-not-cleared)))))
+
+(deftest hard-5-a-stale-clearance-does-not-survive-a-live-hit
+  (testing "the invariant that makes the clearance record insufficient on its own"
+    (let [s (fx/fresh-store)]
+      (is (true? (:ok? (check s routine))))
+      (store/register-client! s {:client-id "C-3" :name "丙山建設株式会社"})
+      (store/register-matter! s {:matter-id "M-3" :client-id "C-3" :bengoshi-id "B-1"
+                                 :status :open :domain "labour"
+                                 :adverse-parties ["株式会社甲野商事"]})
+      (let [v (check s routine)]
+        (is (true? (:hard? v)))
+        (is (contains? (rules v) :conflict-hit-live))
+        (is (not (contains? (rules v) :conflict-check-not-cleared))
+            "the signed clearance is still on file — that is exactly the point")))))
+
+(deftest hard-6-fee-agreement-before-billable-work
+  (let [s (fx/fresh-store)
+        m (store/matter s "M-1")]
+    (store/register-matter! s (dissoc m :fee-agreement))
+    (let [v (check s routine)]
+      (is (true? (:hard? v)))
+      (is (contains? (rules v) :fee-agreement-missing)))
+    (testing "a non-billable op on the same matter is unaffected"
+      (is (not (contains? (rules (check s {:op :issue-invoice :effect :propose
+                                           :matter-id "M-1" :confidence 0.9}))
+                          :fee-agreement-missing))))))
+
+(deftest hard-7-engagement-scope-is-cumulative
+  (let [s (fx/fresh-store)]
+    (testing "12h already recorded + 28h proposed lands exactly on the 40h ceiling"
+      (is (true? (:ok? (check s (assoc routine :billable-hours 28))))))
+    (testing "one hour more is scope creep, not diligence"
+      (let [v (check s (assoc routine :billable-hours 29))]
+        (is (true? (:hard? v)))
+        (is (contains? (rules v) :engagement-scope-exceeded))))
+    (testing "the ceiling counts recorded hours, not just this proposal"
+      (store/register-time-entry! s {:entry-id "T-2" :matter-id "M-1" :bengoshi-id "B-1"
+                                     :hours 20 :date "2026-07-01" :billable? true})
+      (is (contains? (rules (check s (assoc routine :billable-hours 10)))
+                     :engagement-scope-exceeded)))))
+
+(deftest hard-8-trust-rules-reach-the-gate
+  (let [s (fx/fresh-store)
+        withdraw (fn [e] {:op :disburse-trust :effect :propose :matter-id "M-1"
+                          :confidence 0.9
+                          :trust-entry (merge {:matter-id "M-1" :client-id "C-1"
+                                               :direction :out :account :trust
+                                               :currency "JPY"} e)})]
+    (testing "beyond the balance"
+      (let [v (check s (withdraw {:amount 600000 :purpose :client-payout}))]
+        (is (true? (:hard? v)))
+        (is (contains? (rules v) :trust-overdraft))))
+    (testing "appropriating to fees with no issued invoice"
+      (is (contains? (rules (check s (withdraw {:amount 100000 :purpose :fee-appropriation})))
+                     :trust-appropriation-without-invoice)))
+    (testing "an entry that names no account"
+      (is (contains? (rules (check s {:op :receive-trust :effect :propose :matter-id "M-1"
+                                      :confidence 0.9
+                                      :trust-entry {:matter-id "M-1" :direction :in
+                                                    :amount 1000}}))
+                     :trust-commingling)))))
+
+(deftest hard-9-referral-fee-holds-the-operation
+  (let [s (fx/fresh-store)
+        invite (fn [g] {:op :invite-partner-counsel :effect :propose :matter-id "M-1"
+                        :confidence 0.9
+                        :grant (merge {:grant-id "G-1" :matter-id "M-1"
+                                       :grantee-bengoshi-id "B-2" :role :co-counsel
+                                       :capabilities [:read :draft]
+                                       :expires-on "2026-10-28" :conflict-cleared? true} g)})]
+    (testing "a clean co-counsel invitation is escalated, not held"
+      (let [v (check s (invite {}))]
+        (is (false? (:hard? v)) (pr-str (:violations v)))
+        (is (true? (:escalate? v)))))
+    (testing "attach a referral fee and it becomes unrepresentable"
+      (let [v (check s (invite {:referral-fee 30000}))]
+        (is (true? (:hard? v)))
+        (is (contains? (rules v) :referral-fee-forbidden))))
+    (testing "in the receiving direction too"
+      (is (contains? (rules (check s (invite {:referral-fee-received 30000})))
+                     :referral-fee-forbidden)))))
+
+(deftest hard-10-nothing-unreviewed-leaves-the-practice
+  (let [s (fx/fresh-store)
+        issue {:op :issue-work-product :effect :propose :matter-id "M-1"
+               :doc-id "W-1" :confidence 0.95}]
+    (testing "a draft cannot be issued"
+      (let [v (check s issue)]
+        (is (true? (:hard? v)))
+        (is (contains? (rules v) :work-product-not-reviewed))))
+    (testing "reviewed by a verified 弁護士 — then it is an escalated decision, not a hold"
+      (store/register-work-product! s {:doc-id "W-1" :matter-id "M-1" :kind :準備書面
+                                       :status :lawyer-reviewed :reviewed-by "B-1"
+                                       :reviewed-on "2026-07-29"})
+      (let [v (check s issue)]
+        (is (false? (:hard? v)) (pr-str (:violations v)))
+        (is (true? (:escalate? v)))))
+    (testing "'reviewed' by someone who is not active counsel does not count"
+      (store/register-work-product! s {:doc-id "W-1" :matter-id "M-1" :kind :準備書面
+                                       :status :lawyer-reviewed :reviewed-by "B-3"
+                                       :reviewed-on "2026-07-29"})
+      (is (contains? (rules (check s issue)) :reviewer-not-counsel)))
+    (testing "an unknown document"
+      (is (contains? (rules (check s (assoc issue :doc-id "W-404"))) :unknown-work-product)))))
+
+(deftest hard-11-only-counsel-may-review
+  (let [s (fx/fresh-store)
+        review {:op :review-work-product :effect :propose :matter-id "M-1"
+                :doc-id "W-1" :confidence 0.9}]
+    (is (false? (:hard? (check s review))) (pr-str (:violations (check s review))))
+    (is (contains? (rules (check s (assoc review :reviewed-by "B-3"))) :reviewer-not-counsel))))
+
+(deftest hard-12-a-lapsed-critical-deadline-stops-ordinary-work
+  (let [s (fx/fresh-store)
+        late {:today "2026-08-06"}]
+    (testing "on 8月6日 the 控訴期間 (8月5日) has lapsed"
+      (let [v (governor/check fx/request-base late routine s)]
+        (is (true? (:hard? v)))
+        (is (contains? (set (map :rule (:violations v))) :critical-deadline-breached))))
+    (testing "but the responses to a lapse are not blocked by it"
+      (doseq [op [:remediate-deadline :withdraw-representation :file-with-court]]
+        (let [v (governor/check fx/request-base late
+                                {:op op :effect :propose :matter-id "M-1"
+                                 :deadline-id "D-1" :confidence 0.9} s)]
+          (is (not (contains? (set (map :rule (:violations v))) :critical-deadline-breached))
+              (str op " must remain available")))))))
+
+(deftest hard-13-privilege-boundary
+  (let [s (fx/fresh-store)]
+    (store/register-counsel-grant! s {:grant-id "G-1" :matter-id "M-1"
+                                      :grantee-bengoshi-id "B-2"
+                                      :capabilities [:read] :expires-on "2026-06-01"
+                                      :conflict-cleared? true})
+    (testing "an expired grant cannot carry a request"
+      (is (contains? (rules (check s routine {:on-behalf-of-grant "G-1" :capability :read}))
+                     :privilege-boundary)))
+    (testing "nor one lacking the capability"
+      (store/register-counsel-grant! s {:grant-id "G-1" :matter-id "M-1"
+                                        :grantee-bengoshi-id "B-2"
+                                        :capabilities [:read] :expires-on "2026-10-01"
+                                        :conflict-cleared? true})
+      (is (contains? (rules (check s routine {:on-behalf-of-grant "G-1" :capability :sign}))
+                     :privilege-boundary)))
+    (testing "a live grant with the capability passes"
+      (is (not (contains? (rules (check s routine {:on-behalf-of-grant "G-1"
+                                                   :capability :read}))
+                          :privilege-boundary))))))
+
+;; ---------------------------------------------------------------------------
+;; Escalation
+;; ---------------------------------------------------------------------------
+
+(deftest counsel-decisions-always-escalate-regardless-of-confidence
+  (let [s (fx/fresh-store)]
+    (doseq [op governor/always-escalate-ops]
+      (let [v (check s {:op op :effect :propose :matter-id "M-1" :confidence 1.0
+                        :doc-id "W-1"
+                        :grant {:grant-id "G-1" :matter-id "M-1" :grantee-bengoshi-id "B-2"
+                                :capabilities [:read] :expires-on "2026-10-28"
+                                :conflict-cleared? true}})]
+        ;; :issue-work-product additionally requires a reviewed document; that
+        ;; hard rule is covered above. Here we only assert it never auto-commits.
+        (is (false? (:ok? v)) (str op " must never commit without sign-off"))))))
+
+(deftest low-confidence-escalates
+  (let [s (fx/fresh-store)
+        v (check s (assoc routine :confidence 0.4))]
+    (is (false? (:ok? v)))
+    (is (true? (:escalate? v)))
+    (is (= :low-confidence (:escalation-reason v))))
+  (testing "the floor itself passes"
+    (is (true? (:ok? (check (fx/fresh-store) (assoc routine :confidence 0.6)))))))
+
+(deftest a-hard-hold-is-never-reported-as-escalatable
+  (let [v (check (fx/fresh-store) (assoc routine :effect :execute :confidence 0.1))]
+    (is (true? (:hard? v)))
+    (is (false? (:escalate? v)) "a hold is not a thing a human can wave through")
+    (is (nil? (:escalation-reason v)))))

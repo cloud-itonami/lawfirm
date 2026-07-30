@@ -1,0 +1,41 @@
+(ns lawfirm.date-test
+  (:require [clojure.test :refer [deftest is testing]]
+            [lawfirm.date :as date]))
+
+(deftest epoch-roundtrip
+  (testing "civil <-> epoch-day is exact across leap years and centuries"
+    (doseq [d ["1970-01-01" "1999-12-31" "2000-02-29" "2024-02-29" "2026-07-30"
+               "2100-03-01" "1900-02-28"]]
+      (is (= d (date/from-epoch-day (date/epoch-day d))) d)))
+  (is (= 0 (date/epoch-day "1970-01-01")))
+  (is (= 1 (date/epoch-day "1970-01-02")))
+  (is (neg? (date/epoch-day "1969-12-31"))))
+
+(deftest malformed-input-is-nil-not-a-guess
+  (doseq [bad ["2026-7-30" "20260730" "" nil "2026-07-30T00:00:00Z" :x]]
+    (is (nil? (date/epoch-day bad)) (pr-str bad))
+    (is (false? (date/valid? bad)) (pr-str bad))))
+
+(deftest day-arithmetic
+  (is (= "2026-08-13" (date/plus-days "2026-07-30" 14)))
+  (is (= "2026-07-16" (date/plus-days "2026-07-30" -14)))
+  (is (= 14 (date/days-between "2026-07-30" "2026-08-13")))
+  (is (= -14 (date/days-between "2026-08-13" "2026-07-30")))
+  (is (= 366 (date/days-between "2024-01-01" "2025-01-01")) "2024 is a leap year")
+  (is (nil? (date/days-between "bad" "2026-07-30"))))
+
+(deftest month-arithmetic-clamps-to-month-end
+  (testing "民法143条2項但書 — a period from the 31st ends on the month's last day"
+    (is (= "2026-02-28" (date/plus-months "2026-01-31" 1)))
+    (is (= "2024-02-29" (date/plus-months "2024-01-31" 1)) "leap year")
+    (is (= "2026-04-30" (date/plus-months "2026-03-31" 1))))
+  (testing "ordinary months and year boundaries"
+    (is (= "2027-01-15" (date/plus-months "2026-07-15" 6)))
+    (is (= "2031-07-15" (date/plus-months "2026-07-15" 60)) "5 years")
+    (is (= "2025-11-15" (date/plus-months "2026-07-15" -8)) "backwards over the year end")))
+
+(deftest ordering
+  (is (date/before? "2026-07-29" "2026-07-30"))
+  (is (not (date/before? "2026-07-30" "2026-07-30")))
+  (is (date/on-or-before? "2026-07-30" "2026-07-30"))
+  (is (not (date/before? "bad" "2026-07-30"))))

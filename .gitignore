@@ -1,0 +1,4 @@
+# clojure CLI dependency/classpath cache
+.cpcache/
+.clj-kondo/.cache/
+.lsp/

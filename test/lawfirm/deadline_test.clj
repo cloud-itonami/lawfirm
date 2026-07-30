@@ -1,0 +1,75 @@
+(ns lawfirm.deadline-test
+  (:require [clojure.test :refer [deftest is testing]]
+            [lawfirm.deadline :as deadline]
+            [lawfirm.fixture :as fx]
+            [lawfirm.store :as store]))
+
+(deftest statutory-periods-apply-hatsubi-fusannyu
+  (testing "民法140条 初日不算入 — 2週間 from 7月1日送達 expires end of 7月15日"
+    (is (= "2026-07-15" (deadline/compute-due :appeal-civil "2026-07-01"))))
+  (testing "1週間 即時抗告"
+    (is (= "2026-07-08" (deadline/compute-due :immediate-appeal "2026-07-01"))))
+  (testing "月・年は暦計算（143条）"
+    (is (= "2027-01-01" (deadline/compute-due :administrative-suit "2026-07-01")))
+    (is (= "2031-07-01" (deadline/compute-due :prescription-known "2026-07-01")))
+    (is (= "2029-07-01" (deadline/compute-due :tort-prescription "2026-07-01")))
+    (is (= "2036-07-01" (deadline/compute-due :prescription-objective "2026-07-01"))))
+  (testing "month-end clamping reaches the deadline path"
+    (is (= "2027-02-28" (deadline/compute-due :administrative-suit "2026-08-31")))))
+
+(deftest unknown-or-malformed-input-yields-no-deadline
+  (testing "a silently wrong 期限 is worse than none"
+    (is (nil? (deadline/compute-due :not-a-period "2026-07-01")))
+    (is (nil? (deadline/compute-due :appeal-civil "2026-7-1")))
+    (is (nil? (deadline/compute-due :appeal-civil nil)))
+    (is (nil? (deadline/draft "D-X" "M-1" :not-a-period "2026-07-01")))))
+
+(deftest holiday-rolls-forward
+  (testing "民法142条 — 末日が休日なら翌営業日"
+    (let [holidays #{"2026-07-15" "2026-07-16"}]
+      (is (= "2026-07-17"
+             (deadline/compute-due :appeal-civil "2026-07-01" {:holiday? holidays}))))
+    (testing "and without a supplied calendar the un-extended date stands (early, never late)"
+      (is (= "2026-07-15" (deadline/compute-due :appeal-civil "2026-07-01"))))))
+
+(deftest draft-keeps-the-arithmetic-checkable
+  (let [d (deadline/draft "D-9" "M-1" :appeal-civil "2026-07-01")]
+    (is (= "2026-07-15" (:due-on d)))
+    (is (true? (:critical? d)))
+    (is (false? (:satisfied? d)))
+    (is (= "民訴法285条" (get-in d [:derived-from :cite])))
+    (is (= "2026-07-01" (get-in d [:derived-from :trigger-date])))
+    (is (= "判決書の送達" (get-in d [:derived-from :trigger-event])))))
+
+(deftest status-transitions
+  (let [d {:due-on "2026-08-05" :satisfied? false}]
+    (is (= :breached (deadline/status d "2026-08-06")))
+    (is (= :at-risk (deadline/status d "2026-07-30")) "6 days out, inside the 14-day window")
+    (is (= :at-risk (deadline/status d "2026-08-05")) "due today is still actionable")
+    (is (= :pending (deadline/status d "2026-07-01")))
+    (is (= :satisfied (deadline/status (assoc d :satisfied? true) "2026-08-06")))
+    (is (= :unknown (deadline/status {:due-on "not-a-date"} "2026-07-30"))
+        "an unreadable deadline is reported, never treated as fine")))
+
+(deftest breached-critical-only-counts-critical-and-unsatisfied
+  (let [s (fx/fresh-store)]
+    (is (empty? (deadline/breached-critical s "M-1" fx/today)))
+    (is (seq (deadline/breached-critical s "M-1" "2026-08-06")))
+    (testing "a satisfied deadline is not a breach"
+      (store/register-deadline! s {:deadline-id "D-2" :matter-id "M-1"
+                                   :due-on "2026-01-01" :critical? true :satisfied? true})
+      (is (= 1 (count (deadline/breached-critical s "M-1" "2026-08-06")))))
+    (testing "nor is a non-critical one"
+      (store/register-deadline! s {:deadline-id "D-3" :matter-id "M-1"
+                                   :due-on "2026-01-01" :critical? false :satisfied? false})
+      (is (= 1 (count (deadline/breached-critical s "M-1" "2026-08-06")))))))
+
+(deftest docket-sorts-most-urgent-first
+  (let [s (fx/fresh-store)]
+    (store/register-deadline! s {:deadline-id "D-4" :matter-id "M-1"
+                                 :due-on "2026-12-01" :critical? false :satisfied? false})
+    (store/register-deadline! s {:deadline-id "D-5" :matter-id "M-1"
+                                 :due-on "2026-01-01" :critical? true :satisfied? false})
+    (let [cal (deadline/firm-calendar s fx/today)]
+      (is (= ["D-5" "D-1" "D-4"] (mapv :deadline-id cal)))
+      (is (= [:breached :at-risk :pending] (mapv :status cal))))))

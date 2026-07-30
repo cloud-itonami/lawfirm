@@ -1,0 +1,174 @@
+(ns lawfirm.partner-test
+  (:require [clojure.test :refer [deftest is testing]]
+            [lawfirm.fixture :as fx]
+            [lawfirm.partner :as partner]
+            [lawfirm.store :as store]))
+
+(def ^:private b (:b2 fx/counsel))
+
+(defn- rules [violations] (set (map :rule violations)))
+
+(deftest verification-accepts-only-a-live-registry-check
+  (is (partner/verified-active? b fx/today))
+  (testing "not on the 名簿 at all — 弁護士法72条"
+    (is (contains? (rules (partner/verification-violations nil fx/today))
+                   :unregistered-counsel)))
+  (testing "業務停止中"
+    (is (contains? (rules (partner/verification-violations (:b3 fx/counsel) fx/today))
+                   :counsel-not-active)))
+  (testing "verification nobody refreshed"
+    (is (contains? (rules (partner/verification-violations (:b4 fx/counsel) fx/today))
+                   :verification-stale)))
+  (testing "self-asserted admission is not evidence"
+    (is (contains? (rules (partner/verification-violations
+                           (assoc b :verification-source :candidate-said-so) fx/today))
+                   :unaccepted-verification-source)))
+  (testing "missing registration number / bar association"
+    (is (contains? (rules (partner/verification-violations (dissoc b :registration-number) fx/today))
+                   :no-registration-number))
+    (is (contains? (rules (partner/verification-violations (assoc b :bar-association "") fx/today))
+                   :no-bar-association))))
+
+(deftest verification-staleness-boundary
+  (is (false? (partner/verification-stale? {:verified-on "2025-07-30"} "2026-07-30"))
+      "exactly 365 days is still valid")
+  (is (true? (partner/verification-stale? {:verified-on "2025-07-29"} "2026-07-30")))
+  (is (true? (partner/verification-stale? {} "2026-07-30"))))
+
+;; ---------------------------------------------------------------------------
+;; 職務基本規程13条 — referral fees, both directions
+;; ---------------------------------------------------------------------------
+
+(deftest referral-fee-is-forbidden-in-both-directions
+  (is (empty? (partner/referral-fee-violations {})))
+  (is (empty? (partner/referral-fee-violations {:referral-fee 0})))
+  (testing "paying for a referral (13条1項)"
+    (is (= #{:referral-fee-forbidden}
+           (rules (partner/referral-fee-violations {:referral-fee 50000})))))
+  (testing "receiving for a referral (13条2項)"
+    (is (= #{:referral-fee-forbidden}
+           (rules (partner/referral-fee-violations {:referral-fee-received 50000}))))))
+
+(deftest fee-split-must-pay-for-work-actually-done
+  (let [ok {:fee-split [{:bengoshi-id "B-1" :share 60 :role "主任・訴訟追行"}
+                        {:bengoshi-id "B-2" :share 40 :role "労働法論点の起案"}]}]
+    (is (empty? (partner/fee-split-violations ok)))
+    (is (empty? (partner/fee-split-violations {})) "no split is not a bad split")
+    (testing "a residual with no owner is where a referral fee hides"
+      (is (contains? (rules (partner/fee-split-violations
+                             {:fee-split [{:bengoshi-id "B-1" :share 60 :role "主任"}]}))
+                     :fee-split-not-whole)))
+    (testing "a share with no described work IS a referral fee"
+      (is (contains? (rules (partner/fee-split-violations
+                             {:fee-split [{:bengoshi-id "B-1" :share 70 :role "主任"}
+                                          {:bengoshi-id "B-2" :share 30}]}))
+                     :fee-split-without-role)))
+    (testing "an unnamed recipient"
+      (is (contains? (rules (partner/fee-split-violations
+                             {:fee-split [{:bengoshi-id "B-1" :share 70 :role "主任"}
+                                          {:share 30 :role "協力"}]}))
+                     :fee-split-unnamed-participant)))))
+
+;; ---------------------------------------------------------------------------
+;; Grants
+;; ---------------------------------------------------------------------------
+
+(def ^:private good-grant
+  {:grant-id "G-1" :matter-id "M-1" :grantee-bengoshi-id "B-2"
+   :role :co-counsel :capabilities [:read :comment :draft]
+   :expires-on "2026-10-28" :conflict-cleared? true})
+
+(deftest grant-validation
+  (let [s (fx/fresh-store)]
+    (is (empty? (partner/grant-violations s good-grant fx/today)))
+    (testing "grantee must be verified counsel"
+      (is (contains? (rules (partner/grant-violations
+                             s (assoc good-grant :grantee-bengoshi-id "B-3") fx/today))
+                     :counsel-not-active)))
+    (testing "a referral fee riding on a grant"
+      (is (contains? (rules (partner/grant-violations
+                             s (assoc good-grant :referral-fee 30000) fx/today))
+                     :referral-fee-forbidden)))
+    (testing "expiry is mandatory — an open-ended disclosure is a 秘密保持 problem"
+      (is (contains? (rules (partner/grant-violations
+                             s (dissoc good-grant :expires-on) fx/today))
+                     :grant-no-expiry))
+      (is (contains? (rules (partner/grant-violations
+                             s (assoc good-grant :expires-on "2026-01-01") fx/today))
+                     :grant-already-expired)))
+    (testing "capability vocabulary is closed"
+      (is (contains? (rules (partner/grant-violations
+                             s (assoc good-grant :capabilities [:read :exfiltrate]) fx/today))
+                     :grant-unknown-capability))
+      (is (contains? (rules (partner/grant-violations
+                             s (assoc good-grant :capabilities []) fx/today))
+                     :grant-no-capability)))
+    (testing "the grantee's own conflict screen must have run"
+      (is (contains? (rules (partner/grant-violations
+                             s (assoc good-grant :conflict-cleared? false) fx/today))
+                     :grant-conflict-not-cleared)))
+    (testing "unknown matter"
+      (is (contains? (rules (partner/grant-violations
+                             s (assoc good-grant :matter-id "M-404") fx/today))
+                     :grant-unknown-matter)))))
+
+(deftest active-grant-checks-expiry-and-capability
+  (is (true? (store/active-grant? good-grant :read fx/today)))
+  (is (false? (store/active-grant? good-grant :sign fx/today)) "capability not granted")
+  (is (false? (store/active-grant? good-grant :read "2026-11-01")) "expired")
+  (is (true? (store/active-grant? good-grant :read "2026-10-28")) "the expiry day itself")
+  (is (false? (store/active-grant? (assoc good-grant :conflict-cleared? false) :read fx/today)))
+  (is (false? (store/active-grant? nil :read fx/today))))
+
+;; ---------------------------------------------------------------------------
+;; Matching
+;; ---------------------------------------------------------------------------
+
+(deftest candidates-are-verified-unconflicted-and-ranked
+  (let [s (fx/fresh-store)
+        spec {:matter-id "M-9" :client-id "C-2" :bengoshi-id "B-1"
+              :domain "labour" :jurisdiction "JP-13" :adverse-parties ["丁田物産"]}
+        cs (partner/candidates s spec fx/today)]
+    (is (= ["B-2"] (mapv :bengoshi-id cs))
+        "B-1 is the requester; B-3 suspended; B-4 stale verification")
+    (is (pos? (:match-score (first cs))))
+    (testing "a conflicted candidate is dropped, not surfaced with a warning"
+      (let [conflicted {:matter-id "M-9" :client-id "C-2" :bengoshi-id "B-1"
+                        :domain "labour" :jurisdiction "JP-13"
+                        :adverse-parties ["佐藤 花子"]}]
+        (is (empty? (partner/candidates s conflicted fx/today)))))
+    (testing "specialization and jurisdiction actually move the ranking"
+      (let [off (partner/candidates s (assoc spec :domain "criminal" :jurisdiction "JP-99")
+                                    fx/today)]
+        (is (empty? off) "no signal, no match")))))
+
+;; ---------------------------------------------------------------------------
+;; Recruitment funnel
+;; ---------------------------------------------------------------------------
+
+(deftest funnel-counts-and-conversions
+  (let [records (concat (repeat 40 {:stage :sourced})
+                        (repeat 20 {:stage :contacted})
+                        (repeat 10 {:stage :responded})
+                        (repeat 8 {:stage :verified})
+                        (repeat 6 {:stage :screened})
+                        (repeat 4 {:stage :agreed})
+                        (repeat 3 {:stage :onboarded})
+                        (repeat 2 {:stage :active}))
+        f (partner/funnel records)]
+    (is (= 93 (:total f)))
+    (is (= 40 (:count (first (:stages f)))))
+    (is (= 0.5 (:conversion (first (:stages f)))) "sourced -> contacted")
+    (is (nil? (:to-next (last (:stages f)))) "the terminal stage converts to nothing")
+    (testing "a stage converting at exactly the threshold is meeting it"
+      (let [blocked (set (map :stage (partner/blocked-at f)))]
+        (is (not (contains? blocked :sourced)) "40 -> 20 is exactly 0.5")
+        (is (not (contains? blocked :verified)) "8 -> 6 is 0.75")))
+    (testing "and the stage that genuinely bleeds is named"
+      (let [blocked (set (map :stage (partner/blocked-at f 0.6)))]
+        (is (contains? blocked :sourced))
+        (is (contains? blocked :contacted))
+        (is (not (contains? blocked :verified)))))
+    (testing "an empty stage cannot divide by zero"
+      (is (= 0.0 (:conversion (first (:stages (partner/funnel []))))))
+      (is (empty? (partner/blocked-at (partner/funnel [])))))))
