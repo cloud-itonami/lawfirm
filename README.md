@@ -4,7 +4,7 @@
 langgraph StateGraph の governed actor（`LawFirmAdvisor ⊣ LawFirmGovernor`）として実装し、
 台帳は commit も hold も両方積む append-only。
 
-**成熟度: `:implemented`.** 79 tests / 361 assertions green（`clojure -M:test`）、
+**成熟度: `:implemented`.** 81 tests / 377 assertions green（`clojure -M:test`）、
 `clojure -M:lint` warnings 0、レンダリング済みコンソールは
 [design-quality](https://github.com/kotoba-lang/design-quality) の決定論的
 HIG/WCAG 監査で **100.00 / 100**。
@@ -39,7 +39,7 @@ HIG/WCAG 監査で **100.00 / 100**。
 | [`lawfirm.partner`](src/lawfirm/partner.cljc) | 提携弁護士。資格確認・適合度マッチング・共同受任 grant・獲得ファネル |
 | [`lawfirm.intake`](src/lawfirm/intake.cljc) | 相談受付のトリアージ。本文は記録に載せない |
 | [`lawfirm.advisor`](src/lawfirm/advisor.cljc) | LLM を封じ込める唯一のノード。提案しか返さない |
-| [`lawfirm.governor`](src/lawfirm/governor.cljc) | ゲート。13 の HARD 不変条件 + 7 の必須承認操作 |
+| [`lawfirm.governor`](src/lawfirm/governor.cljc) | ゲート。13 の HARD 不変条件 + 7 の必須承認操作。verdict 組み立てと provenance 4規則は [`kotoba-lang/governor`](https://github.com/kotoba-lang/governor) を使う（fleet で 376 repo に手で複製され、1件が乖離していた層 — ADR-2607309100） |
 | [`lawfirm.actor`](src/lawfirm/actor.cljc) | StateGraph。`intake → advise → govern → decide → commit \| request-approval \| hold` |
 | [`lawfirm.console`](src/lawfirm/console.cljc) | 弁護士コンソール（kotoba-ui、pure `.cljc` hiccup、SSR） |
 | [`lawfirm.demo`](src/lawfirm/demo.cljc) | サンプル事務所。テストとデモページが**同じ記録**を使う |
@@ -90,7 +90,7 @@ HIG/WCAG 監査で **100.00 / 100**。
 ## 使う
 
 ```bash
-clojure -M:test              # 79 tests / 361 assertions
+clojure -M:test              # 81 tests / 377 assertions
 clojure -M:lint              # clj-kondo, errors fail
 clojure -M:render-console    # docs/samples/lawyer-console.html を再生成
 ```

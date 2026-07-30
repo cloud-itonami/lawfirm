@@ -15,6 +15,13 @@
         {:git/url "https://github.com/kotoba-lang/langgraph.git"
          :git/sha "577a59a9d5eb3ef90b81342f4673973f481ff7f4"}
 
+        ;; The fleet-shared verdict assembly + provenance rules. Not a
+        ;; hand-copy: the same five lines existed in 376 governors here and one
+        ;; had drifted (ADR-2607309100).
+        io.github.kotoba-lang/governor
+        {:git/url "https://github.com/kotoba-lang/governor.git"
+         :git/sha "8df632b6610d30f6fef4edd9782cb1659bedb727"}
+
         io.github.kotoba-lang/kotoba-ui
         {:git/url "https://github.com/kotoba-lang/kotoba-ui.git"
          :git/sha "4167b3aa911690368bb47b61e825c47d3327bfac"}

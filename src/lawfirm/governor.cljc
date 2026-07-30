@@ -68,7 +68,8 @@
   a counterparty. These are escalated because they are *decisions*, not
   because the model is unsure: 受任, 提出, 出金, 和解, 辞任, 書面の外部送付,
   共同受任の招請. Plus any proposal below `confidence-floor`."
-  (:require [lawfirm.conflict :as conflict]
+  (:require [governor.core :as gov]
+            [lawfirm.conflict :as conflict]
             [lawfirm.deadline :as deadline]
             [lawfirm.partner :as partner]
             [lawfirm.store :as store]
@@ -120,23 +121,24 @@
         wp (when doc-id (store/work-product store doc-id))
         reviewer (when (= :review-work-product op)
                    (store/bengoshi store (or (:reviewed-by proposal) (:bengoshi-id request))))]
-    (cond-> []
-      (not= :propose (:effect proposal))
-      (conj {:rule :no-actuation
-             :detail "effect は :propose のみ許可（本 actor は提出・送金・署名・送付を自ら実行しない）"})
-
-      true
-      (into (partner/verification-violations me today))
-
-      (nil? c)
-      (conj {:rule :no-client :detail "未登録の依頼者"})
-
-      (and matter? (nil? m))
-      (conj {:rule :unknown-matter :detail "未登録の事件に対する操作は不可"})
-
-      (and matter? m (not= (:client-id m) (:client-id request)))
-      (conj {:rule :matter-wrong-client
-             :detail (str "事件 " (:matter-id m) " は別依頼者のもの")})
+    ;; Invariants 1 and 3 are the fleet-shared provenance rules, taken from
+    ;; `kotoba-lang/governor` rather than hand-copied. Their logic is identical
+    ;; in 376 repositories here and one of those copies had drifted
+    ;; (ADR-2607309100); the `:detail` wording stays this repo's own, because
+    ;; it is text a 弁護士 reads. Everything from invariant 2 down is this
+    ;; actor's domain and stays here.
+    (cond-> (gov/violations
+             (gov/no-actuation
+              proposal
+              {:detail "effect は :propose のみ許可（本 actor は提出・送金・署名・送付を自ら実行しない）"})
+             (partner/verification-violations me today)
+             (gov/missing-subject c {:detail "未登録の依頼者"})
+             (gov/unknown-scope m {:applies? matter?
+                                   :detail "未登録の事件に対する操作は不可"})
+             (when matter?
+               (gov/scope-owner-mismatch
+                m request
+                {:detail (str "事件 " (:matter-id m) " は別依頼者のもの")})))
 
       (and m (conflict-required? op) (not (conflict/cleared-by-human? store (:matter-id m))))
       (conj {:rule :conflict-check-not-cleared
@@ -212,17 +214,12 @@
         hard (hard-violations store
                               {:request request :context context :proposal proposal}
                               me c m)
-        hard? (boolean (seq hard))
-        conf (or (:confidence proposal) 0.0)
-        low? (< conf confidence-floor)
-        decision-op? (contains? always-escalate-ops (:op proposal))]
-    {:ok? (and (not hard?) (not low?) (not decision-op?))
-     :violations hard
-     :confidence conf
-     :hard? hard?
-     :escalate? (and (not hard?) (or low? decision-op?))
-     :escalation-reason (cond
-                          hard? nil
-                          decision-op? :counsel-decision
-                          low? :low-confidence)
-     :screen (when m (conflict/screen-matter store m))}))
+        ]
+    (gov/verdict
+     {:violations hard
+      :confidence (:confidence proposal)
+      :confidence-floor confidence-floor
+      :escalating-op? (contains? always-escalate-ops (:op proposal))
+      ;; The screen the gate actually ran, retained so a console can show the
+      ;; 弁護士 what was checked rather than only the conclusion.
+      :extra {:screen (when m (conflict/screen-matter store m))}})))
