@@ -16,7 +16,7 @@
 ## 開発
 
 ```bash
-clojure -M:test              # 79 tests / 361 assertions
+clojure -M:test              # 81 tests / 377 assertions
 clojure -M:lint              # clj-kondo, errors fail, warnings 0 を維持する
 clojure -M:render-console    # docs/samples/lawyer-console.html を再生成
 ```
@@ -31,6 +31,11 @@ clojure -M:render-console    # docs/samples/lawyer-console.html を再生成
 
 - **記録の書き込みは `lawfirm.actor/apply-effect!` からのみ。** `:commit` ノード以外から
   `store/register-*!` を呼ぶ実務コードを追加しない（テストとセットアップは除く）。
+- **verdict の組み立てを手で書き直さない。** `gov/verdict` / `gov/disposition` /
+  `gov/violations` と provenance 4規則（`no-actuation` / `missing-subject` /
+  `unknown-scope` / `scope-owner-mismatch`）は `kotoba-lang/governor` のもの。
+  fleet で 376 repo に複製され1件が乖離した層なので、ここでローカルコピーに戻さない
+  （ADR-2607309100）。domain 規則と `:detail` 文言はこの repo のもの。
 - **governor は advisor の理由を読まない。** 提案の良し悪しではなく、登録済みの記録に
   対して照合する。`governor.cljc` に `:rationale` を見るコードを足さない。
 - **`:hold` も台帳に積む。** 何をしたかしか残らない事務所は、弁護士会に

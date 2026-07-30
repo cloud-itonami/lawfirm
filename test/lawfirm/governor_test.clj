@@ -1,5 +1,6 @@
 (ns lawfirm.governor-test
   (:require [clojure.test :refer [deftest is testing]]
+            [governor.core :as gov]
             [lawfirm.fixture :as fx]
             [lawfirm.governor :as governor]
             [lawfirm.store :as store]))
@@ -240,3 +241,54 @@
     (is (true? (:hard? v)))
     (is (false? (:escalate? v)) "a hold is not a thing a human can wave through")
     (is (nil? (:escalation-reason v)))))
+
+;; ---------------------------------------------------------------------------
+;; Conformance — the property, not the literal (ADR-2607309100)
+;; ---------------------------------------------------------------------------
+
+(deftest every-verdict-is-well-formed
+  (testing "no reachable verdict can say a HARD hold is awaiting sign-off.
+            The fleet's one drifted governor said exactly that, and its graph
+            still routed correctly — so routing tests would not have caught it.
+            This would have."
+    (let [s (fx/fresh-store)
+          cases [routine
+                 (assoc routine :confidence 0.1)
+                 (assoc routine :effect :execute)
+                 (assoc routine :billable-hours 999)
+                 {:op :issue-work-product :effect :propose :matter-id "M-1"
+                  :doc-id "W-1" :confidence 0.95}
+                 {:op :accept-representation :effect :propose :matter-id "M-1"
+                  :confidence 1.0}
+                 {:op :disburse-trust :effect :propose :matter-id "M-1" :confidence 0.99
+                  :trust-entry {:matter-id "M-1" :client-id "C-1" :direction :out
+                                :amount 9999999 :account :trust :currency "JPY"}}
+                 {:op :invite-partner-counsel :effect :propose :matter-id "M-1"
+                  :confidence 0.9
+                  :grant {:grant-id "G" :matter-id "M-1" :grantee-bengoshi-id "B-2"
+                          :capabilities [:read] :expires-on "2026-10-28"
+                          :conflict-cleared? true :referral-fee 30000}}]]
+      (doseq [p cases]
+        (let [v (check s p)]
+          (is (empty? (gov/conformance-failures v))
+              (str (:op p) " → " (pr-str (gov/conformance-failures v))))))))
+  (testing "and the two rules that must never be approvable stay unapprovable"
+    (let [s (fx/fresh-store)]
+      (doseq [[label proposal]
+              [["紹介料" {:op :invite-partner-counsel :effect :propose :matter-id "M-1"
+                          :confidence 1.0
+                          :grant {:grant-id "G" :matter-id "M-1" :grantee-bengoshi-id "B-2"
+                                  :capabilities [:read] :expires-on "2026-10-28"
+                                  :conflict-cleared? true :referral-fee 30000}}]
+               ["未精査書面の発出" {:op :issue-work-product :effect :propose
+                                    :matter-id "M-1" :doc-id "W-1" :confidence 1.0}]]]
+        (let [v (check s proposal)]
+          (is (true? (:hard? v)) label)
+          (is (false? (:escalate? v)) (str label " は承認待ちとして表示されてはならない"))
+          (is (= :hold (gov/disposition v)) label))))))
+
+(deftest the-screen-survives-the-shared-verdict
+  (testing ":extra carries this actor's own key through the shared assembly"
+    (let [v (check (fx/fresh-store) routine)]
+      (is (some? (:screen v)))
+      (is (true? (get-in v [:screen :cleared?]))))))
