@@ -1,125 +1,75 @@
-# etzhayyim-project-lawfirm
+# CLAUDE.md — lawfirm
 
-Legal case management and BPO automation platform (`lawfirm.etzhayyim.com`).
+法律事務所 practice OS。**正典実装は `src/lawfirm/**` の `.cljc`**。
+概要は [`README.md`](README.md)、実務手順は [`docs/operator-guide.md`](docs/operator-guide.md)、
+提携弁護士の獲得計画は [`docs/partner-recruitment.md`](docs/partner-recruitment.md)。
 
-## Runtime
+## 触る前に読むもの
 
-**containerd-shim-kotodama** (`40-engine/kotoba/crates/kotoba-kotodama`) を使用。App CRD / containerd-shim-kotodama は除去済み。
+1. [`src/lawfirm/governor.cljc`](src/lawfirm/governor.cljc) の docstring —
+   13 の HARD 不変条件と 7 の必須承認操作。**このリポジトリの仕様はここにある。**
+2. [`src/lawfirm/conflict.cljc`](src/lawfirm/conflict.cljc) の docstring —
+   なぜ「人間の判断記録」と「本日の再スクリーン」が別々に必要なのか。
+3. [`src/lawfirm/advisor.cljc`](src/lawfirm/advisor.cljc) の `payload-keys` —
+   モデルが作れないものの一覧と、その理由。
 
-| 項目 | 値 |
-|---|---|
-| WASM binary | TS Native (`src/app.ts`) |
-| ランタイム | `kotodama-server` (Rust) |
-| トリガー | HTTP (`0.0.0.0:8080`) |
-| AT コレクション | `com.etzhayyim.command`, `com.etzhayyim.conversation.message` |
-| Storage backend | yata Broker (SQL graph) |
-| Config | `kotodama/kotodama.jsonld` |
-| Deploy | `etzhayyim build && etzhayyim deploy` (Cloudflare Container) |
-
-旧 `deploy config` (App CRD 時代) および `kotodama/k8s/deployment.yaml` は除去済み。deploy は `etzhayyim deploy` を使用する。
-
-## Components
-
-| Component | Path | Role |
-|---|---|---|
-| `lawfirm-client-mcp-component` | `wasm/lawfirm-client-mcp-component/` | Client-facing XRPC + AT command handler |
-| `lawfirm-lawyer-static-component` | `wasm/lawfirm-lawyer-static-component/` | Lawyer UI (Svelte SPA) + LawyerService XRPC |
-
-## AT Protocol
-
-- `AT_ACTOR_DID` は k8s Secret `lawfirm-at-identity` の `actor-did` key から inject される
-- AT Firehose: **abolished** — events via yata-wrpc (embedded)
-- 購読コレクション: `com.etzhayyim.command`, `com.etzhayyim.conversation.message`
-- AT commit は `dispatchATCommit` → `rt.InvokeATCommand` で performer Runtime に渡る
-
-## Structured Data
-
-- storage は kotodama WIT bindings (`kotodama.LanceQuerySQL`, `kotodama.LanceUpsertOne`, `kotodama.KvGet` 等) 経由
-- storage は kotodama WIT bindings 経由。直接 HTTP client 禁止
-- 主要テーブルは `lawfirmPrimaryKeys` map (`db_http.go`) に定義済み
-- RLS 列 `org_id`, `user_id`, `actor_id` は全テーブルに必須
-
-## Daily Evolution
-
-- `handle_daily_evolution` が `PerformerConfig.Methods` に登録済み（必須）
-- `DefaultAppTeam("lawfirm1", "lawfirm", ...)` + `RegisterDailyEvolutionReminder` 設定済み
-- LLM: `murakumo.etzhayyim.com` / `qwen3-vl-8b`
-
-## India Intake (Hindi / 22 Scheduled Languages, 2026-04)
-
-Hindi / regional-language user が `https://lawfirm.etzhayyim.com` から申込可能。実装: `src/app.ts` §India routing helpers + 4 commands。
-
-| NSID | 役割 | 根拠 |
-|---|---|---|
-| `com.etzhayyim.apps.lawfirm.translateToLang` | en/JP → hi/bn/ta/… 翻訳 (Murakumo MLX pipethrough) | lexicon L7 |
-| `com.etzhayyim.apps.lawfirm.translateFromLang` | regional-lang → en (court of record) or hi | lexicon L7 |
-| `com.etzhayyim.apps.lawfirm.requestConsult` | 初回 intake。**AT Repo には hash のみ** (ADR-0018 Tier 3 PII) | ADR-0018 / ADR-0026 |
-| `com.etzhayyim.apps.lawfirm.createCase` | 案件作成 + India markers 検出時に peer firm へ auto-invite | ADR-0019 / ADR-0029 |
-
-**India marker 判定**: `lang ∈ {hi, bn, ta, te, mr, gu, kn, ml, pa, or, as, ur, sa, ne, sd, ks, kok, mai, mni, sat, doi, brx}` OR `state.startsWith("IN-")` OR `jurisdiction ∈ {IND, IN}`。
-
-**Auto-route to peer firm**: India marker 一致時、`LAWYER_FIRM_DID_HINT` (e.g. lawyer.etzhayyim.com) 宛に `externalCounselGrant` を自動発行 (role=coCounsel, capabilities=read/comment/uploadDocument/propose/sign/scheduleHearing, expires=+90d)。`KUNAL_LEAD_HANDLE_HINT`(default `k.bakshi`) が `granteeHandle`、`KUNAL_LEAD_DID_HINT` が `leadBengoshiHint` として記録される。
-
-**PII handling (CRITICAL)**:
-- `requestConsult`: plaintext summary は drop。AT Repo には `summaryHash` + `lang` + `state` + `triageCohortDid` のみ
-- `createCase`: `subjectSummary` は `signal:v1:{base64(utf8)}` prefix で wrap (wproto signal ADR-0010 Stage 1、PDS helpers.ts runtime detect)
-
-### Deploy Config (CRITICAL)
-
-`bootstrap` 後に以下の 3 var を wrangler secret / vars で埋める必要がある:
+## 開発
 
 ```bash
-# post-phase1 (lawyer.etzhayyim.com firm did:etzhayyim root)
-wrangler secret put LAWYER_FIRM_DID_HINT   # did:etzhayyim:{h_lawyer}
-wrangler secret put KUNAL_LEAD_DID_HINT    # did:etzhayyim:{h_lawyer}:{h_bakshi}
-# handle はデフォルト k.bakshi (wrangler.jsonc vars)
+clojure -M:test              # 79 tests / 361 assertions
+clojure -M:lint              # clj-kondo, errors fail, warnings 0 を維持する
+clojure -M:render-console    # docs/samples/lawyer-console.html を再生成
 ```
 
-**Silent skip は禁止 (ADR-0036)**。India marker 検出時に auto-route が失敗した場合、`createCase` は必ず以下を行う:
-1. `console.error("[createCase] auto-route skipped|failed (<code>): <message> caseDid=... lang=... state=...")` を記録
-2. response body に `autoRouteError: { code, message }` + `autoRouteExpected: true` を含めて返す
+- コンソールは design-quality の決定論的 HIG/WCAG 監査で **100.00** を維持する
+  （`console_test.clj` の `score-floor`）。**回帰を通すために floor を下げない。**
+  レポートが名指しした指摘を直す。
+- `render-console` は **byte-identical across reruns** でなければならない
+  （`rendering-is-deterministic`）。時刻・乱数を入れない。
 
-`code` 値: `NotConfigured` (env 未設定) / `InvalidConfig` (DID 形式不正) / `MintOrWriteFailed` (mint/write 例外)。caller は `autoRouteExpected === true && !autoGrant` で routing 失敗を検知可能。case record 自体は作成される (intake 救済)。
+## この repo 固有の不変条件（破らない）
 
-### Smoke (India path)
+- **記録の書き込みは `lawfirm.actor/apply-effect!` からのみ。** `:commit` ノード以外から
+  `store/register-*!` を呼ぶ実務コードを追加しない（テストとセットアップは除く）。
+- **governor は advisor の理由を読まない。** 提案の良し悪しではなく、登録済みの記録に
+  対して照合する。`governor.cljc` に `:rationale` を見るコードを足さない。
+- **`:hold` も台帳に積む。** 何をしたかしか残らない事務所は、弁護士会に
+  「何をしなかったか」を示せない。
+- **紹介料は escalate ではなく HARD hold。** 人間が承認しても通ってはいけない（規程13条）。
+- **UI は `kotoba-ui.core` + `appkit.core` のみ require。** 生の hex はテーマ map の
+  2 色だけ。app CSS は unlayered のままにし、`.liquid-glass__*` との詳細度勝負をしない
+  （skill `kotoba-uiux`）。
+- **`.cljc` に `java.time` / `js/Date` / `Math/round` を入れない。** 日付は
+  `lawfirm.date`、丸めは `console/pct`。
+- **金額は最小単位の整数。** 浮動小数点を持ち込まない。
+- **モデル名を焼かない。** `advisor/resolve-model` の解決順（明示 → `murakumo-main`
+  alias → endpoint のみ）を迂回しない（ADR-2607173100）。
+- **`bb.edn` / `.sh` を新規に置かない**（ADR-2607173000、CLAUDE.md repo-wide）。
+  スクリプトが要るなら nbb。
 
-```bash
-# Hindi intake
-curl -sX POST https://lawfirm.etzhayyim.com/xrpc/com.etzhayyim.apps.lawfirm.requestConsult \
-  -H "Authorization: Bearer ${BEARER}" -H "Content-Type: application/json" \
-  -d '{"lang":"hi","state":"IN-MH","city":"mumbai","summary":"मेरा चेक बाउंस हो गया","domainHint":"ni138","channel":"web"}'
-# → { consultDid, uri, triageCohortDid, suggestedDomain: "ni138" }
+## テストの約束
 
-# India case (auto-routes to Kunal if LAWYER_FIRM_DID_HINT set)
-curl -sX POST https://lawfirm.etzhayyim.com/xrpc/com.etzhayyim.apps.lawfirm.createCase \
-  -H "Authorization: Bearer ${BEARER}" -H "Content-Type: application/json" \
-  -d '{"domain":"ni138","state":"IN-MH","lang":"hi","city":"mumbai","subjectSummary":"Cheque ₹5L bounced","amountInDispute":500000,"currency":"INR","urgency":"routine"}'
-# → { did, uri, cohortDid, caseNumber, autoGrant: { grantDid, granteeDid, granteeHandle: "k.bakshi" } }
+- `lawfirm.demo` はテストとデモページの**共通**の ground truth。
+  デモ専用のフィクスチャを別に作らない（作った瞬間にデモは「実際には走っていないものの
+  スクリーンショット」になる）。
+- 新しい HARD 不変条件を足したら、`governor_test.clj` に
+  「違反すると hold」「違反しなければ通る」の両方を書く。片方だけだと、
+  常に hold する実装でもテストが緑になる。
 
-# Hindi translation
-curl -sX POST https://lawfirm.etzhayyim.com/xrpc/com.etzhayyim.apps.lawfirm.translateToLang \
-  -H "Content-Type: application/json" \
-  -d '{"text":"Section 138 NI Act complaint","targetLang":"hi","register":"court-of-record","domain":"ni138"}'
-```
+## legacy — `appview/`
 
-## Build
+`appview/etzhayyim-wasm-lawfirm-lf1rm8k0/` は `etzhayyim/root` からの抽出物
+（Svelte + TS + Cloudflare Worker、インド / ヒンディー語の intake、
+AT Protocol lexicon `com.etzhayyim.apps.lawfirm.*`）。**正典ではない。**
 
-```bash
-# lawfirm-lawyer-static-component (Svelte + API)
-cd 60-apps/etzhayyim-project-lawfirm/wasm/lawfirm-lawyer-static-component/svelte
-pnpm install && pnpm build
-cd ..
-etzhayyim deploy
-```
+- 参照する `lawfirm.etzhayyim.com` / `bengoshi.etzhayyim.com` /
+  `dispatcher.etzhayyim.com` は 2026-07-30 時点でいずれも名前解決しない（未デプロイ）。
+- Svelte / Tailwind / TS はワークスペースの UI 規約に反する。
 
-## Deploy
+**ここに新しい作業を積まない。** 同等の機能が必要なら `src/lawfirm/` に `.cljc` で書く。
+インド intake を正典側に持ってくる場合は、`lawfirm.intake/domains` の分野語彙と
+`lawfirm.deadline/statutory` の法定期間表を当該法域向けに追加するのが正しい入口で、
+`appview/` を拡張するのは違う。
 
-```bash
-# client component
-etzhayyim deploy --smoke-url https://lawfirm.etzhayyim.com/health
-
-# smoke test
-curl https://lawfirm.etzhayyim.com/health
-curl -X POST https://lawfirm.etzhayyim.com/etzhayyim.lawfirm.v1.LawfirmQueryService/ListCases \
-  -H "Content-Type: application/json" -d '{}'
-```
+`lg-clj/`（Python LangGraph の bb 移植）は削除済み。移植先と、移植しなかったものは
+[`README.md`](README.md) 末尾に記録した。

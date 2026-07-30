@@ -1,0 +1,119 @@
+(ns lawfirm.render-console
+  "Build-time renderer for `docs/samples/lawyer-console.html`.
+
+  This drives the **real** actor stack — `lawfirm.actor` →
+  `lawfirm.governor` → `lawfirm.store` — over the `lawfirm.demo` practice the
+  test suite asserts on, then renders `lawfirm.console` against the resulting
+  state. Nothing on the page is typed in by hand: the 預り金 balance is the
+  balance after a governed disbursement actually ran, the held operation is
+  held because the governor held it, and the approval queue contains the
+  thread the graph really parked.
+
+  Deterministic: no clock is read, no random ids, byte-identical across reruns
+  against the same seed. Verify by diffing two consecutive runs before
+  shipping.
+
+  `clojure -M:render-console [out-file]`"
+  (:require [clojure.java.io :as io]
+            [lawfirm.actor :as actor]
+            [lawfirm.console :as console]
+            [lawfirm.demo :as demo]
+            [lawfirm.deadline :as deadline]
+            [lawfirm.store :as store]))
+
+(def default-out "docs/samples/lawyer-console.html")
+
+(defn scenario
+  "Run a day in the practice through the actor and return the state it left
+  behind, plus the approval queue the graph parked.
+
+  Every step below is a real `run-request!`. The comments say what the
+  governor is expected to do; the page shows what it did."
+  []
+  (let [s (demo/fresh-store)
+        g (actor/build-graph {:store s})
+        req (fn [m] (merge demo/request-base m))
+        run (fn [m thread] (actor/run-request! g (req m) demo/context thread))]
+
+    ;; A second registered deadline, derived from the statutory table rather
+    ;; than typed in, so the page shows the citation trail.
+    (store/register-deadline!
+     s (deadline/draft "D-2" "M-1" :prescription-known "2024-03-15"))
+
+    ;; 1. Routine drafting — commits.
+    (run {:op :prepare-work-product :billable-hours 6
+          :work-product {:doc-id "W-2" :matter-id "M-1" :kind :準備書面}}
+         "demo-draft")
+
+    ;; 2. Issuing that draft — HELD. Nothing a 弁護士 has not personally
+    ;;    examined leaves the practice.
+    (run {:op :issue-work-product :doc-id "W-2"} "demo-issue-unreviewed")
+
+    ;; 3. The 弁護士 reviews it — commits, and records who reviewed it.
+    (run {:op :review-work-product :doc-id "W-2" :reviewed-by "B-1"
+          :reviewed-on "2026-07-29"}
+         "demo-review")
+
+    ;; 4. A referral fee attached to a co-counsel invitation — HELD outright,
+    ;;    never merely escalated (職務基本規程13条).
+    (run {:op :invite-partner-counsel
+          :grant {:grant-id "G-BAD" :matter-id "M-1" :grantee-bengoshi-id "B-2"
+                  :capabilities [:read] :expires-on "2026-10-28"
+                  :conflict-cleared? true :referral-fee 50000}}
+         "demo-referral-fee")
+
+    ;; 5. A trust disbursement — escalates, then a named 弁護士 signs off and
+    ;;    the money moves.
+    (run {:op :disburse-trust
+          :trust-entry {:entry-id "TR-2" :matter-id "M-1" :client-id "C-1"
+                        :direction :out :amount 120000 :currency "JPY"
+                        :account :trust :date "2026-07-28" :purpose :court-fee}}
+         "demo-payout")
+    (actor/approve! g "demo-payout" {:by "B-1" :on "2026-07-29"})
+
+    ;; 6. A co-counsel invitation with a work-based fee split — parks for
+    ;;    sign-off and stays on the page as the live approval queue.
+    (run {:op :invite-partner-counsel
+          :grant {:grant-id "G-1" :matter-id "M-1" :grantee-bengoshi-id "B-2"
+                  :role :co-counsel :capabilities [:read :comment :draft]
+                  :expires-on "2026-10-28" :conflict-cleared? true
+                  :fee-split [{:bengoshi-id "B-1" :share 70 :role "主任・訴訟追行"}
+                              {:bengoshi-id "B-2" :share 30 :role "労働法論点の起案"}]}}
+         "demo-cocounsel")
+
+    {:store s
+     :pending [{:thread-id "demo-cocounsel" :op :invite-partner-counsel
+                :matter-id "M-1" :escalation-reason :counsel-decision
+                :requested-on "2026-07-30"}]}))
+
+(def funnel-records
+  "The partner-recruitment funnel shown on the page. These are *illustrative
+  counts for the panel*, not a claim about a real pipeline — the practice
+  supplies its own. Labelled here rather than in the page so the distinction
+  survives copy-paste."
+  (concat (repeat 24 {:stage :sourced})
+          (repeat 11 {:stage :contacted})
+          (repeat 7 {:stage :responded})
+          (repeat 6 {:stage :verified})
+          (repeat 5 {:stage :screened})
+          (repeat 3 {:stage :agreed})
+          (repeat 2 {:stage :onboarded})
+          (repeat 1 {:stage :active})))
+
+(defn render []
+  (let [{:keys [store pending]} (scenario)]
+    (console/render
+     store demo/today
+     {:matter-id "M-1"
+      :pending pending
+      :partner {:matter-spec {:matter-id "M-9" :client-id "C-2" :bengoshi-id "B-1"
+                              :domain "labour" :jurisdiction "JP-13"
+                              :adverse-parties ["丁田物産株式会社"]}
+                :funnel-records funnel-records}})))
+
+(defn -main [& [out]]
+  (let [out (or out default-out)
+        html (render)]
+    (io/make-parents out)
+    (spit out html)
+    (println (str "wrote " out " (" (count html) " bytes)"))))

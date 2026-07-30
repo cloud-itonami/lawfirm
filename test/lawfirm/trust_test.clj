@@ -1,0 +1,91 @@
+(ns lawfirm.trust-test
+  (:require [clojure.test :refer [deftest is testing]]
+            [lawfirm.fixture :as fx]
+            [lawfirm.store :as store]
+            [lawfirm.trust :as trust]))
+
+(defn- entry [m] (merge {:matter-id "M-1" :client-id "C-1" :currency "JPY"
+                         :account :trust :date "2026-07-01"} m))
+
+(deftest balance-is-per-matter
+  (let [s (fx/fresh-store)]
+    (is (= 500000 (trust/balance s "M-1")))
+    (is (= 0 (trust/balance s "M-2")) "another matter's money is not available here")
+    (store/register-trust-entry! s (entry {:entry-id "TR-2" :direction :out :amount 200000}))
+    (is (= 300000 (trust/balance s "M-1")))
+    (testing "operating-account movements never touch the trust balance"
+      (store/register-trust-entry! s (entry {:entry-id "TR-3" :direction :in
+                                             :amount 999999 :account :operating}))
+      (is (= 300000 (trust/balance s "M-1")))
+      (is (= 999999 (trust/balance s "M-1" :operating))))))
+
+(deftest overdraft-detection
+  (let [s (fx/fresh-store)]
+    (is (false? (trust/overdraft? s "M-1" 500000)) "exactly the balance is fine")
+    (is (true? (trust/overdraft? s "M-1" 500001)))
+    (testing "another matter's surplus cannot mask this matter's overdraft"
+      (store/register-trust-entry! s (entry {:entry-id "TR-9" :matter-id "M-2"
+                                             :direction :in :amount 10000000}))
+      (is (true? (trust/overdraft? s "M-1" 500001))))))
+
+(deftest an-entry-must-name-an-account
+  (is (true? (trust/commingled? {:direction :in :amount 1})))
+  (is (true? (trust/commingled? {:account :petty-cash})))
+  (is (false? (trust/commingled? {:account :trust})))
+  (is (false? (trust/commingled? {:account :operating}))))
+
+(deftest appropriation-requires-an-issued-invoice
+  (let [s (fx/fresh-store)]
+    (testing "no invoice at all"
+      (let [r (trust/appropriation-basis s "M-1" nil 100000)]
+        (is (false? (:ok? r)))
+        (is (= :no-invoice (:reason r)))))
+    (store/register-invoice! s {:invoice-id "IV-1" :matter-id "M-1" :client-id "C-1"
+                                :amount 300000 :currency "JPY" :status :draft})
+    (testing "a drafted invoice is not an issued one"
+      (is (= :invoice-not-issued (:reason (trust/appropriation-basis s "M-1" "IV-1" 100000)))))
+    (store/register-invoice! s {:invoice-id "IV-1" :matter-id "M-1" :client-id "C-1"
+                                :amount 300000 :currency "JPY" :status :issued
+                                :issued-on "2026-07-20"})
+    (testing "issued and covering"
+      (is (true? (:ok? (trust/appropriation-basis s "M-1" "IV-1" 300000)))))
+    (testing "issued but not covering"
+      (is (= :exceeds-invoice (:reason (trust/appropriation-basis s "M-1" "IV-1" 300001)))))
+    (testing "another matter's invoice"
+      (store/register-invoice! s {:invoice-id "IV-2" :matter-id "M-2" :client-id "C-1"
+                                  :amount 900000 :status :issued :issued-on "2026-07-20"})
+      (is (= :invoice-wrong-matter (:reason (trust/appropriation-basis s "M-1" "IV-2" 100000)))))))
+
+(deftest disbursement-violations-cover-the-three-failures
+  (let [s (fx/fresh-store)]
+    (testing "clean withdrawal inside the balance"
+      (is (empty? (trust/disbursement-violations
+                   s (entry {:entry-id "X" :direction :out :amount 100000
+                             :purpose :client-payout})))))
+    (testing "混同 — no account named"
+      (is (= [:trust-commingling]
+             (mapv :rule (trust/disbursement-violations
+                          s {:matter-id "M-1" :direction :out :amount 1})))))
+    (testing "流用 — beyond this matter's balance"
+      (is (contains? (set (mapv :rule (trust/disbursement-violations
+                                       s (entry {:direction :out :amount 600000}))))
+                     :trust-overdraft)))
+    (testing "無断充当 — fee appropriation with no issued invoice"
+      (is (contains? (set (mapv :rule (trust/disbursement-violations
+                                       s (entry {:direction :out :amount 100000
+                                                 :purpose :fee-appropriation}))))
+                     :trust-appropriation-without-invoice)))
+    (testing "deposits are unconstrained by balance"
+      (is (empty? (trust/disbursement-violations
+                   s (entry {:direction :in :amount 99999999})))))))
+
+(deftest ledger-lines-carry-a-running-balance
+  (let [s (fx/fresh-store)]
+    (store/register-trust-entry! s (entry {:entry-id "TR-2" :direction :out
+                                           :amount 120000 :date "2026-06-01"}))
+    (store/register-trust-entry! s (entry {:entry-id "TR-3" :direction :in
+                                           :amount 20000 :date "2026-07-02"}))
+    (let [lines (trust/ledger-lines s "M-1")]
+      (is (= ["TR-1" "TR-2" "TR-3"] (mapv :entry-id lines)) "oldest first")
+      (is (= [500000 380000 400000] (mapv :running-balance lines)))
+      (is (= (trust/balance s "M-1") (:running-balance (last lines)))))))

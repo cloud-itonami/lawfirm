@@ -1,0 +1,110 @@
+(ns lawfirm.intake-test
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
+            [lawfirm.conflict :as conflict]
+            [lawfirm.fixture :as fx]
+            [lawfirm.intake :as intake]
+            [lawfirm.partner :as partner]))
+
+(deftest deterministic-classification
+  (testing "the domain with the most keyword hits wins"
+    (is (= "labour" (:domain (intake/fallback-classify
+                              "残業代が未払いのまま解雇されました" {}))))
+    (is (= "inheritance" (:domain (intake/fallback-classify
+                                   "父の遺産の分割協議がまとまりません" {}))))
+    (is (= "traffic" (:domain (intake/fallback-classify
+                               "追突されて後遺障害が残りました" {})))))
+  (testing "no signal falls to other, with the confidence to match"
+    (let [r (intake/fallback-classify "困っています" {})]
+      (is (= "other" (:domain r)))
+      (is (< (:confidence r) 0.2))))
+  (testing "a caller-supplied hint wins over inference"
+    (is (= "corporate" (:domain (intake/fallback-classify
+                                 "残業代が未払いです" {:domain-hint "corporate"})))))
+  (testing "an unknown hint is ignored rather than propagated"
+    (is (= "labour" (:domain (intake/fallback-classify
+                              "残業代が未払いです" {:domain-hint "nonsense"})))))
+  (testing "the fallback names itself as the fallback"
+    (is (= :fallback (:source (intake/fallback-classify "解雇" {}))))))
+
+(deftest a-running-period-is-never-triaged-as-routine
+  (doseq [text ["判決書が届きました"
+                "支払督促が来ています"
+                "時効が近いかもしれません"
+                "内容証明が届きました"]]
+    (is (= :statutory-deadline (:urgency (intake/classify text {}))) text))
+  (testing "and the flag survives an LLM that missed it"
+    (let [confident-but-wrong (fn [_] {:content (pr-str {:domain "corporate"
+                                                         :urgency :routine
+                                                         :jurisdiction "JP-13"
+                                                         :confidence 0.95})})
+          r (intake/classify "判決書が届きました" {:generate-fn confident-but-wrong})]
+      (is (= :statutory-deadline (:urgency r))
+          "the model may raise urgency, never lower it")
+      (is (true? (:deadline-marker-detected r)))
+      (is (= "corporate" (:domain r)) "the rest of the model's answer is kept"))))
+
+(deftest llm-output-is-validated-before-it-is-trusted
+  (let [call (fn [content] (fn [_] {:content content}))]
+    (testing "a well-formed answer is used"
+      (let [r (intake/classify "解雇されました"
+                               {:generate-fn (call (pr-str {:domain "labour"
+                                                            :urgency :urgent
+                                                            :jurisdiction "JP-13"
+                                                            :confidence 0.8}))})]
+        (is (= :llm (:source r)))
+        (is (= :urgent (:urgency r)))
+        (is (= "JP-13" (:jurisdiction r)))))
+    (testing "an invented domain falls back rather than propagating"
+      (let [r (intake/classify "解雇されました"
+                               {:generate-fn (call (pr-str {:domain "space-law"
+                                                            :urgency :routine
+                                                            :confidence 0.99}))})]
+        (is (= :fallback (:source r)))
+        (is (= "labour" (:domain r)))))
+    (testing "an invented urgency is coerced, not accepted"
+      (let [r (intake/classify "解雇されました"
+                               {:generate-fn (call (pr-str {:domain "labour"
+                                                            :urgency :apocalyptic
+                                                            :confidence 0.9}))})]
+        (is (= :routine (:urgency r)))))
+    (testing "unparseable output falls back instead of throwing"
+      (is (= :fallback (:source (intake/classify "解雇" {:generate-fn (call "not edn (")}))))
+      (is (= :fallback (:source (intake/classify "解雇" {:generate-fn (call "\"a string\"")})))))
+    (testing "a model that throws does not take the front door down"
+      (is (= :fallback (:source (intake/classify
+                                 "解雇"
+                                 {:generate-fn (fn [_] (throw (ex-info "down" {})))})))))))
+
+(deftest the-record-carries-no-prose
+  (let [text "株式会社丙山建設に解雇され、残業代も未払いです。妻の名前は…"
+        triage (intake/classify text {})
+        rec (intake/->consult-record {:consult-id "CS-1" :received-on "2026-07-30"
+                                      :channel :web :digest "sha256:abcd"
+                                      :triage triage})
+        dump (pr-str rec)]
+    (testing "no fragment of the description survives into the record"
+      (doseq [fragment ["丙山建設" "解雇" "残業代" "妻"]]
+        (is (not (str/includes? dump fragment)) fragment)))
+    (testing "what is kept is the classification and a pointer"
+      (is (= "labour" (:domain rec)))
+      (is (= "労働" (:domain-label rec)))
+      (is (= "sha256:abcd" (:summary-digest rec)))
+      (is (= :fallback (:triage-source rec)))
+      (is (number? (:triage-confidence rec))))))
+
+(deftest an-intake-can-be-conflict-screened-before-anyone-agrees-to-anything
+  (let [s (fx/fresh-store)
+        triage (intake/classify "残業代の未払いがあります" {:jurisdiction-hint "JP-13"})
+        rec (intake/->consult-record {:consult-id "CS-2" :received-on "2026-07-30"
+                                      :channel :web :digest "sha256:ef01" :triage triage})
+        spec (intake/matter-spec rec {:client-id "C-2" :bengoshi-id "B-1"
+                                      :adverse-parties ["株式会社甲野商事"]})]
+    (testing "the prospective matter screens against the existing book"
+      (let [screen (conflict/screen s spec)]
+        (is (false? (:cleared? screen))
+            "甲野商事 is already a client — the practice cannot act against them")
+        (is (contains? (set (map :rule (:hits screen))) :adverse-to-current-client))))
+    (testing "and a clean intake can be matched to a partner"
+      (let [clean (assoc spec :adverse-parties ["丁田物産株式会社"])]
+        (is (= ["B-2"] (mapv :bengoshi-id (partner/candidates s clean fx/today))))))))

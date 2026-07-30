@@ -1,0 +1,139 @@
+(ns lawfirm.console-test
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
+            [design-quality.audit :as dq]
+            [lawfirm.console :as console]
+            [lawfirm.fixture :as fx]
+            [lawfirm.render-console :as render]
+            [lawfirm.store :as store]
+            [lawfirm.trust :as trust]))
+
+(deftest yen-formatting
+  (is (= "¥0" (console/yen 0)))
+  (is (= "¥0" (console/yen nil)))
+  (is (= "¥500" (console/yen 500)))
+  (is (= "¥1,000" (console/yen 1000)))
+  (is (= "¥500,000" (console/yen 500000)))
+  (is (= "¥1,234,567" (console/yen 1234567)))
+  (is (= "-¥1,000" (console/yen -1000)) "a negative trust balance must be visible, not hidden"))
+
+(deftest percentage-formatting-is-portable
+  (is (= "0%" (console/pct 0)))
+  (is (= "50%" (console/pct 0.5)))
+  (is (= "75%" (console/pct 0.75)))
+  (is (= "100%" (console/pct 1.0)))
+  (is (= "0%" (console/pct nil))))
+
+;; ---------------------------------------------------------------------------
+;; The screen must agree with the gate
+;; ---------------------------------------------------------------------------
+
+(deftest the-console-reads-the-same-numbers-the-governor-gates-on
+  (let [s (fx/fresh-store)
+        html (console/render s fx/today {:matter-id "M-1" :pending [] :partner {}})]
+    (testing "trust balance"
+      (is (str/includes? html (console/yen (trust/balance s "M-1")))))
+    (testing "engagement consumption"
+      (is (str/includes? html (str (console/hours (store/billed-hours s "M-1"))
+                                   " / "
+                                   (console/hours (:max-billable-hours (store/matter s "M-1")))))))
+    (testing "and it does not silently recompute them"
+      (store/register-trust-entry! s {:entry-id "TR-X" :matter-id "M-1" :client-id "C-1"
+                                      :direction :out :amount 100000 :account :trust
+                                      :date "2026-07-30" :purpose :court-fee})
+      ;; The ¥500,000 deposit stays visible as a ledger *line* — that history
+      ;; is the point of a 預り金 ledger. What must move is the balance
+      ;; metric, so assert on the metric element rather than on the page text.
+      (let [html2 (console/render s fx/today {:matter-id "M-1" :pending [] :partner {}})
+            metric #(str "metric-value hig-title2\">" % "</div>")]
+        (is (str/includes? html2 (metric "¥400,000")))
+        (is (not (str/includes? html2 (metric "¥500,000"))))))))
+
+(deftest a-live-conflict-hit-is-shown-not-swallowed
+  (let [s (fx/fresh-store)]
+    (store/register-client! s {:client-id "C-3" :name "丙山建設株式会社"})
+    (store/register-matter! s {:matter-id "M-3" :client-id "C-3" :bengoshi-id "B-1"
+                               :status :open :domain "labour"
+                               :adverse-parties ["株式会社甲野商事"]})
+    (let [html (console/render s fx/today {:matter-id "M-1" :pending [] :partner {}})]
+      (is (str/includes? html "same-matter-opposing-side"))
+      (is (str/includes? html "27条1号")))))
+
+(deftest the-approval-queue-renders-its-reasons
+  (let [s (fx/fresh-store)
+        html (console/render s fx/today
+                             {:pending [{:thread-id "T-1" :op :disburse-trust
+                                         :matter-id "M-1"
+                                         :escalation-reason :counsel-decision
+                                         :requested-on "2026-07-30"}
+                                        {:thread-id "T-2" :op :prepare-work-product
+                                         :matter-id "M-1"
+                                         :escalation-reason :low-confidence
+                                         :requested-on "2026-07-30"}]})]
+    (is (str/includes? html "弁護士の判断を要する操作"))
+    (is (str/includes? html "確信度が閾値未満"))))
+
+;; ---------------------------------------------------------------------------
+;; Design-system conformance (skill kotoba-uiux review checklist)
+;; ---------------------------------------------------------------------------
+
+(deftest app-css-uses-tokens-only-and-stays-small
+  (testing "no raw hex, no px font-size, no font-family in app CSS"
+    (is (not (re-find #"#[0-9a-fA-F]{3,8}\b" console/app-css)))
+    (is (not (re-find #"font-size\s*:\s*\d" console/app-css)))
+    (is (not (re-find #"font-family" console/app-css))))
+  (testing "and no specificity fights against library classes"
+    (is (not (str/includes? console/app-css ".liquid-glass__"))))
+  (testing "app CSS stays small — under ~50 lines is the healthy signal"
+    (is (< (count (str/split console/app-css #"\}")) 12)
+        "if this grows, the shell is missing a scaffold; extend shell upstream")))
+
+(deftest the-only-hex-in-app-code-is-the-theme-map
+  (let [hexes (set (re-seq #"#[0-9a-fA-F]{6}" (pr-str console/theme)))]
+    (is (= #{"#1F4E79" "#7FB3E8"} hexes))
+    (is (= :auto (:appearance console/theme))
+        "the viewer's system decides light or dark; we do not hand-write a dark palette")))
+
+(deftest rendered-page-is-a-complete-japanese-document
+  (let [html (console/render (fx/fresh-store) fx/today {:matter-id "M-1"})]
+    (is (str/starts-with? html "<!doctype html>"))
+    (is (str/includes? html "lang=\"ja\""))
+    (is (str/includes? html "viewport"))
+    (is (str/includes? html "法律事務所コンソール"))))
+
+;; ---------------------------------------------------------------------------
+;; The audit gate — an unmeasured page is theater (ADR-2607132300)
+;; ---------------------------------------------------------------------------
+
+(def score-floor
+  "Measured at 100.00 when this landed. Fix what the report names; never lower
+  the floor to make a regression pass."
+  100.0)
+
+(deftest console-meets-the-hig-wcag-floor
+  (let [{:keys [overall findings]}
+        (dq/audit {"lawyer-console" (render/render)} {:extra-axes dq/extra-axes})]
+    (is (>= overall score-floor)
+        (str "score " overall " — " (pr-str (mapv :axis findings))))))
+
+;; ---------------------------------------------------------------------------
+;; The demo page is the tested practice, not a separate fiction
+;; ---------------------------------------------------------------------------
+
+(deftest the-sample-page-is-produced-by-the-real-actor
+  (let [{:keys [store]} (render/scenario)]
+    (testing "the held operation was actually held — the draft never issued"
+      (is (= :lawyer-reviewed (:status (store/work-product store "W-2")))))
+    (testing "the referral-fee grant was never created"
+      (is (nil? (store/counsel-grant store "G-BAD"))))
+    (testing "the approved disbursement really moved the money"
+      (is (= 380000 (trust/balance store "M-1"))))
+    (testing "and the ledger carries both the commits and the refusals"
+      (let [dispositions (frequencies (map :disposition (store/ledger store)))]
+        (is (pos? (get dispositions :hold 0)))
+        (is (pos? (get dispositions :commit 0)))
+        (is (pos? (get dispositions :approved 0)))))))
+
+(deftest rendering-is-deterministic
+  (testing "byte-identical across reruns — a page with a clock in it cannot be diffed"
+    (is (= (render/render) (render/render)))))
