@@ -29,16 +29,22 @@
       (is (= ["A-1"] (mapv :answer-id (store/qa-answers-for s "Q-1"))))
       (is (= [] (store/qa-answers-for s "Q-404"))))))
 
-(deftest a-deadline-is-upserted-and-a-transmission-is-appended
+(deftest records-whose-state-changes-are-upserted-by-id
   (let [s (store/mem-store)]
-    (store/register-deadline! s {:deadline-id "D-1" :matter-id "M" :satisfied? false})
-    (store/register-deadline! s {:deadline-id "D-1" :matter-id "M" :satisfied? true})
-    (is (= [true] (mapv :satisfied? (store/deadlines-of s "M")))
-        "a cured 期限 must not leave its uncured self behind")
-    (store/register-transmission! s {:transmission-id "T-1" :matter-id "M" :channel :fax})
-    (store/register-transmission! s {:transmission-id "T-2" :matter-id "M" :channel :post})
-    (is (= 2 (count (store/transmissions-of s "M")))
-        "the same 書面 lawfully goes to more than one recipient")))
+    (testing "a cured 期限 must not leave its uncured self behind"
+      (store/register-deadline! s {:deadline-id "D-1" :matter-id "M" :satisfied? false})
+      (store/register-deadline! s {:deadline-id "D-1" :matter-id "M" :satisfied? true})
+      (is (= [true] (mapv :satisfied? (store/deadlines-of s "M")))))
+    (testing "distinct 送達 ids accumulate — the same 書面 lawfully goes to
+              the court, the opposing counsel and the client"
+      (store/register-transmission! s {:transmission-id "T-1" :matter-id "M" :channel :fax})
+      (store/register-transmission! s {:transmission-id "T-2" :matter-id "M" :channel :post})
+      (is (= 2 (count (store/transmissions-of s "M")))))
+    (testing "but one 送達 confirmed does not leave its unconfirmed self behind"
+      (store/register-transmission! s {:transmission-id "T-1" :matter-id "M"
+                                       :channel :fax :result :ok})
+      (is (= 2 (count (store/transmissions-of s "M"))))
+      (is (= [:ok nil] (mapv :result (store/transmissions-of s "M")))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Durable store

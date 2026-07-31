@@ -102,9 +102,20 @@
                    recipient. Outbound rows are written only through the
                    governor gate; inbound rows carry no prose, only a
                    caller-supplied digest.
+
+                   Upserted by `:transmission-id`, because the outcome
+                   arrives after the act: a fax is handed to a gateway, and
+                   minutes later the gateway says whether a machine answered.
+                   `:dialled` is the number the *provider reports having
+                   used*, kept separate from the registered coordinate so
+                   `transmission/direction-check` can compare them — a
+                   transport that altered the destination is the incident
+                   this whole namespace exists to make visible.
                    {:transmission-id :matter-id :direction #{:outbound
                     :inbound} :channel :doc-id :recipient-id :sent-on
-                    :page-count :result :confirmation :digest}
+                    :page-count :digest
+                    :result #{:ok :failed :pending} :provider :provider-id
+                    :provider-status :dialled :confirmed-on :misdirected?}
 
     qa-question  — 依頼者・相談者からの質問. Like an intake description, the
                    prose never lands here — only the classification and a
@@ -258,10 +269,16 @@
 ;; reporting a breach that was already cured.
 (defn db-put-deadline [db d] (update db :deadlines upsert-by :deadline-id d))
 
-;; A 送達 is an event and accumulates — the same document may lawfully go to
-;; the court, the opposing counsel and the client, and each of those is a
-;; separate fact with its own date and result.
-(defn db-append-transmission [db t] (db-append db :transmissions t))
+;; Upsert by id, like a 期限 and unlike the time/trust logs.
+;;
+;; The same document lawfully goes to the court, the opposing counsel and the
+;; client, and each of those is a separate 送達 with its own id — so ids
+;; accumulate. But one 送達 is a record whose state changes: it is sent, and
+;; then later the provider says whether it arrived. Appending the confirmed
+;; copy would leave the unconfirmed original in place and
+;; `transmission/unconfirmed` would keep reporting a result that is already
+;; known. It also makes a replayed gateway queue idempotent.
+(defn db-put-transmission [db t] (update db :transmissions upsert-by :transmission-id t))
 
 ;; ---------------------------------------------------------------------------
 ;; Implementations
@@ -307,7 +324,7 @@
   (register-work-product! [s w] (swap! a db-put :work-product w) s)
   (register-counsel-grant! [s g] (swap! a db-put :counsel-grant g) s)
   (register-recipient! [s r] (swap! a db-put :recipient r) s)
-  (register-transmission! [s t] (swap! a db-append-transmission t) s)
+  (register-transmission! [s t] (swap! a db-put-transmission t) s)
   (register-qa-question! [s q] (swap! a db-put :qa-question q) s)
   (register-qa-answer! [s ans] (swap! a db-put :qa-answer ans) s)
   (commit-record! [s record] (swap! a db-append :records record) s)
@@ -394,7 +411,7 @@
   (register-work-product! [s w] (commit! a persist! #(db-put % :work-product w)) s)
   (register-counsel-grant! [s g] (commit! a persist! #(db-put % :counsel-grant g)) s)
   (register-recipient! [s r] (commit! a persist! #(db-put % :recipient r)) s)
-  (register-transmission! [s t] (commit! a persist! #(db-append-transmission % t)) s)
+  (register-transmission! [s t] (commit! a persist! #(db-put-transmission % t)) s)
   (register-qa-question! [s q] (commit! a persist! #(db-put % :qa-question q)) s)
   (register-qa-answer! [s ans] (commit! a persist! #(db-put % :qa-answer ans)) s)
   (commit-record! [s record] (commit! a persist! #(db-append % :records record)) s)

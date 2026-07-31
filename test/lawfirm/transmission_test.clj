@@ -1,5 +1,6 @@
 (ns lawfirm.transmission-test
   (:require [clojure.test :refer [deftest is testing]]
+            [lawfirm.actor :as actor]
             [lawfirm.fixture :as fx]
             [lawfirm.governor :as governor]
             [lawfirm.store :as store]
@@ -197,3 +198,149 @@
   (let [r (store/recipient (fx/fresh-store) "R-1")]
     (is (false? (transmission/verification-stale? r :hand fx/today)))
     (is (some? (transmission/coordinate r :hand)))))
+
+;; ---------------------------------------------------------------------------
+;; Confirmation — what the transport says happened
+;; ---------------------------------------------------------------------------
+
+(defn- confirm [c]
+  {:op :confirm-transmission :effect :propose :matter-id "M-1" :confidence 0.9
+   :transmission-confirmation (merge {:transmission-id "TX-2" :matter-id "M-1"} c)})
+
+(deftest recording-an-outcome-needs-no-counsel-sign-off
+  (testing "an outcome is a fact about the world, like an arrival"
+    (let [v (check (fx/fresh-store) (confirm {:result :ok :provider :dropbox-fax
+                                              :dialled "03-XXXX-0002"
+                                              :confirmed-on fx/today}))]
+      (is (true? (:ok? v)) (pr-str (:violations v)))
+      (is (false? (:escalate? v))))))
+
+(deftest an-outcome-for-a-transmission-nobody-registered-is-held
+  (let [v (check (fx/fresh-store) (confirm {:transmission-id "TX-404" :result :ok}))]
+    (is (true? (:hard? v)))
+    (is (contains? (rules v) :unknown-transmission))))
+
+(deftest an-inbound-row-has-no-send-result
+  (let [v (check (fx/fresh-store) (confirm {:transmission-id "IN-9001" :result :ok}))]
+    (is (true? (:hard? v)))
+    (is (contains? (rules v) :confirmation-not-outbound))))
+
+(deftest an-outcome-may-be-recorded-on-a-matter-whose-deadline-lapsed
+  (testing "refusing to write down what happened would destroy the evidence"
+    (let [s (fx/fresh-store)]
+      (store/register-deadline! s {:deadline-id "D-1" :matter-id "M-1"
+                                   :kind :appeal-civil :due-on "2026-06-01"
+                                   :critical? true :satisfied? false})
+      (let [v (check s (confirm {:result :ok :dialled "03-XXXX-0002"}))]
+        (is (not (contains? (rules v) :critical-deadline-breached)))
+        (is (true? (:ok? v)) (pr-str (:violations v)))))))
+
+;; --- number comparison -----------------------------------------------------
+
+(deftest the-same-line-in-two-notations-is-the-same-line
+  (is (true? (transmission/same-number? "03-1234-5678" "0312345678")))
+  (is (true? (transmission/same-number? "+81 3-1234-5678" "03-1234-5678")))
+  (is (true? (transmission/same-number? "03 (1234) 5678" "+81312345678")))
+  (is (false? (transmission/same-number? "03-1234-5678" "03-1234-9999")))
+  (is (false? (transmission/same-number? "" "0312345678")))
+  (is (false? (transmission/same-number? nil nil))))
+
+(deftest a-comparison-with-no-evidence-says-so-rather-than-saying-no
+  (let [s (fx/fresh-store)]
+    (testing "the registered number, dialled"
+      (is (= :match (transmission/direction-check
+                     s {:recipient-id "R-2" :channel :fax
+                        :dialled "03-XXXX-0002"}))))
+    (testing "a destination the transport did not report"
+      (is (= :undeterminable (transmission/direction-check
+                              s {:recipient-id "R-2" :channel :fax :dialled nil}))))
+    (testing "a channel with no registered coordinate"
+      (is (= :undeterminable (transmission/direction-check
+                              s {:recipient-id "R-2" :channel :post :dialled "0312345678"}))))
+    (testing "a recipient nobody registered"
+      (is (= :undeterminable (transmission/direction-check
+                              s {:recipient-id "R-404" :channel :fax :dialled "0312345678"}))))))
+
+(deftest a-real-number-that-does-not-match-is-a-mismatch
+  (let [s (fx/fresh-store)]
+    (store/register-recipient! s (assoc-in (store/recipient s "R-2")
+                                           [:channels :fax :number] "03-1234-5678"))
+    (is (= :match (transmission/direction-check
+                   s {:recipient-id "R-2" :channel :fax :dialled "+81312345678"})))
+    (is (= :mismatch (transmission/direction-check
+                      s {:recipient-id "R-2" :channel :fax :dialled "03-9999-0000"})))))
+
+;; --- applying it -----------------------------------------------------------
+
+(deftest a-misdirection-is-recorded-not-refused
+  (testing "the document has already left; the only thing left to get right
+            is the record"
+    (let [s (fx/fresh-store)]
+      (store/register-recipient! s (assoc-in (store/recipient s "R-1")
+                                             [:channels :fax :number] "03-1234-5678"))
+      (let [g (actor/build-graph {:store s})
+            result (actor/run-request!
+                    g (merge fx/request-base
+                             (confirm {:transmission-id "TX-1" :result :ok
+                                       :provider :dropbox-fax :provider-id "abc"
+                                       :dialled "03-9999-0000" :confirmed-on fx/today}))
+                    fx/context "t-mis")
+            row (first (filter #(= "TX-1" (:transmission-id %))
+                               (store/transmissions-of s "M-1")))]
+        (is (actor/committed? result) (pr-str (get-in result [:state :verdict :violations])))
+        (is (true? (:misdirected? row)))
+        (is (= :mismatch (:direction-check row)))
+        (is (= :ok (:result row)) "the transport succeeded — at the wrong number")
+        (is (= ["TX-1"] (mapv :transmission-id (transmission/misdirected s "M-1"))))))))
+
+(deftest a-transport-cannot-report-on-itself
+  (testing "the misdirection verdict is computed from the record, so a payload
+            claiming everything is fine does not make it so"
+    (let [s (fx/fresh-store)]
+      (store/register-recipient! s (assoc-in (store/recipient s "R-1")
+                                             [:channels :fax :number] "03-1234-5678"))
+      (let [row (transmission/apply-confirmation
+                 s (first (filter #(= "TX-1" (:transmission-id %))
+                                  (store/transmissions-of s "M-1")))
+                 {:result :ok :dialled "03-9999-0000" :misdirected? false
+                  :direction-check :match})]
+        (is (true? (:misdirected? row)))
+        (is (= :mismatch (:direction-check row)))))))
+
+(deftest an-unreadable-result-becomes-pending-not-success
+  (let [s (fx/fresh-store)
+        row (transmission/apply-confirmation
+             s (first (store/transmissions-of s "M-1"))
+             {:result :nonsense :dialled "03-XXXX-0001"})]
+    (is (= :pending (:result row)))))
+
+(deftest confirming-clears-the-unconfirmed-list
+  (let [s (fx/fresh-store)
+        g (actor/build-graph {:store s})]
+    (is (= #{"TX-2"} (set (map :transmission-id (transmission/unconfirmed s "M-1")))))
+    (actor/run-request! g (merge fx/request-base
+                                 (confirm {:transmission-id "TX-2" :result :ok
+                                           :dialled "03-XXXX-0002"
+                                           :confirmed-on fx/today}))
+                        fx/context "t-conf")
+    (is (empty? (transmission/unconfirmed s "M-1")))
+    (is (= 3 (count (store/transmissions-of s "M-1")))
+        "confirming upserts — it must not add a second row for the same 送達")))
+
+(deftest a-channel-with-no-registered-coordinate-cannot-be-checked
+  (testing "TX-2 went by post to a recipient with only a fax number — the
+            record has nothing to compare a destination against, and saying
+            'not misdirected' there would be a finding nobody made"
+    (let [s (fx/fresh-store)
+          g (actor/build-graph {:store s})]
+      (actor/run-request! g (merge fx/request-base
+                                   (confirm {:transmission-id "TX-2" :result :ok
+                                             :dialled "どこか" :confirmed-on fx/today}))
+                          fx/context "t-undet")
+      (let [row (first (filter #(= "TX-2" (:transmission-id %))
+                               (store/transmissions-of s "M-1")))]
+        (is (= :undeterminable (:direction-check row)))
+        (is (false? (:misdirected? row)) "not an incident — a gap in the evidence")
+        (is (= ["TX-2"] (mapv :transmission-id
+                              (transmission/undeterminable-direction s "M-1")))
+            "and it is listed as such, separately from incidents")))))

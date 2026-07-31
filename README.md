@@ -4,7 +4,7 @@
 langgraph StateGraph の governed actor（`LawFirmAdvisor ⊣ LawFirmGovernor`）として実装し、
 台帳は commit も hold も両方積む append-only。
 
-**成熟度: `:implemented`.** 138 tests / 568 assertions green（`clojure -M:test`）、
+**成熟度: `:implemented`.** 152 tests / 609 assertions green（`clojure -M:test`）、
 `clojure -M:lint` warnings 0、レンダリング済みコンソールは
 [design-quality](https://github.com/kotoba-lang/design-quality) の決定論的
 HIG/WCAG 監査で **100.00 / 100**。
@@ -43,7 +43,7 @@ HIG/WCAG 監査で **100.00 / 100**。
 | [`lawfirm.workspace`](src/lawfirm/workspace.cljc) | host が実装する port（inbox / drive / calendar / 送信ゲートウェイ）と、到着物を actor の **request** に変える入口 |
 | [`lawfirm.intake`](src/lawfirm/intake.cljc) | 相談受付のトリアージ。本文は記録に載せない |
 | [`lawfirm.advisor`](src/lawfirm/advisor.cljc) | LLM を封じ込める唯一のノード。提案しか返さない |
-| [`lawfirm.governor`](src/lawfirm/governor.cljc) | ゲート。18 の HARD 不変条件 + 9 の必須承認操作。verdict 組み立てと provenance 4規則は [`kotoba-lang/governor`](https://github.com/kotoba-lang/governor) を使う（fleet で 376 repo に手で複製され、1件が乖離していた層 — ADR-2607309100） |
+| [`lawfirm.governor`](src/lawfirm/governor.cljc) | ゲート。19 の HARD 不変条件 + 9 の必須承認操作。verdict 組み立てと provenance 4規則は [`kotoba-lang/governor`](https://github.com/kotoba-lang/governor) を使う（fleet で 376 repo に手で複製され、1件が乖離していた層 — ADR-2607309100） |
 | [`lawfirm.actor`](src/lawfirm/actor.cljc) | StateGraph。`intake → advise → govern → decide → commit \| request-approval \| hold` |
 | [`lawfirm.console`](src/lawfirm/console.cljc) | 弁護士コンソール（kotoba-ui、pure `.cljc` hiccup、SSR） |
 | [`lawfirm.demo`](src/lawfirm/demo.cljc) | サンプル事務所。テストとデモページが**同じ記録**を使う |
@@ -81,13 +81,21 @@ HIG/WCAG 監査で **100.00 / 100**。
 | 16 | 弁護士が自ら精査した記録のない相談回答は送信できない。受任前の相談は、その相談者に対する日付入りの利益相反スクリーンを要する | 法務省 2023年ガイドライン / 規程27条 |
 | 17 | 相談回答を精査できるのは有効登録の弁護士のみ | 同上 |
 | 18 | 受付・受信記録・質問の記録に**本文を入れられない**（分類と digest のみ） | 秘密保持義務 |
+| 19 | 送信結果は、存在する発信の送達に対してのみ記録できる。**誤送信は拒否せず記録する** | 事故の証跡保全 |
 
 **必ず弁護士の承認を要する操作**（確信度に関わらず）: 受任・裁判所への提出・預り金の出金・
 和解・辞任・書面の外部送付・**送達**・**相談回答の送信**・共同受任の招請。
 加えて確信度が 0.6 未満の提案。
 
-**到着したものの記録は承認を要しない。** 受信した FAX と依頼者からの質問は世界についての
-事実であって判断ではなく、書き留めるのに承認が要る事務所は、単に書き留めない。
+**到着したものの記録と、送信結果の記録は承認を要しない。** 受信した FAX・依頼者からの質問・
+経路が返してきた送信結果は世界についての事実であって判断ではなく、書き留めるのに承認が要る
+事務所は、単に書き留めない。
+
+**誤送信は hold しない。** 書面は既に出てしまっており、残っているのは記録を正しくすることだけ。
+どこへ行ったかを書き留めるのを拒否したら、事故の証跡そのものが消える。
+`transmission/direction-check` は `:match` / `:mismatch` / **`:undeterminable`** の3値を返す——
+照合の材料が無いときに `false`（＝誤送信でない）と答えるのは、誰も行っていない検査結果を
+記録することになるので、その選択肢を持たせていない。
 
 ### 14 が「宛先フィールド」ではなく「宛先レコード」である理由
 
@@ -113,7 +121,7 @@ HIG/WCAG 監査で **100.00 / 100**。
 ## 使う
 
 ```bash
-clojure -M:test              # 138 tests / 568 assertions
+clojure -M:test              # 152 tests / 609 assertions
 clojure -M:lint              # clj-kondo, errors fail
 clojure -M:render-console    # docs/samples/lawyer-console.html を再生成
 ```

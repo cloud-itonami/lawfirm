@@ -160,3 +160,29 @@
       (is (nil? (:trust m)))
       (is (pos? (trust/balance s "M-1"))
           "the balance exists — it is deliberately not in the projection"))))
+
+(deftest a-misdirection-reaches-the-portal-summary-as-an-incident
+  (let [s (fx/fresh-store)]
+    (is (= 0 (get-in (projection/matter-summary s "M-1" fx/today)
+                     [:transmissions :misdirected])))
+    (store/register-recipient! s (assoc-in (store/recipient s "R-1")
+                                           [:channels :fax :number] "03-1234-5678"))
+    (store/register-transmission!
+     s (assoc (first (filter #(= "TX-1" (:transmission-id %))
+                             (store/transmissions-of s "M-1")))
+              :misdirected? true :direction-check :mismatch
+              :dialled "03-9999-0000"))
+    (is (= 1 (get-in (projection/matter-summary s "M-1" fx/today)
+                     [:transmissions :misdirected])))
+    (is (= 1 (get-in (projection/practice-summary s fx/today) [:totals :misdirected])))))
+
+(deftest an-unverifiable-destination-is-counted-apart-from-an-incident
+  (let [s (fx/fresh-store)]
+    (store/register-transmission!
+     s (assoc (first (filter #(= "TX-2" (:transmission-id %))
+                             (store/transmissions-of s "M-1")))
+              :direction-check :undeterminable :result :ok))
+    (let [t (:transmissions (projection/matter-summary s "M-1" fx/today))]
+      (is (= 1 (:undeterminable t)))
+      (is (= 0 (:misdirected t))
+          "a gap in the evidence is not a confidentiality event"))))

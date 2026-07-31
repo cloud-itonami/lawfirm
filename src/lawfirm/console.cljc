@@ -72,7 +72,8 @@
    ;; already wrong, orange is something about to be.
    :verified "確認済" :stale "要再確認"
    :unanswered "未回答" :awaiting-review "精査待ち"
-   :awaiting-send "送信待ち" :answered "回答済"})
+   :awaiting-send "送信待ち" :answered "回答済"
+   :misdirected "誤送信" :undeterminable "照合不能"})
 
 (def ^:private status-token
   "System palette tokens, not invented hex — the do/don't table names this
@@ -87,7 +88,9 @@
    :unanswered "var(--hig-palette-orange)"
    :awaiting-review "var(--hig-palette-orange)"
    :awaiting-send "var(--hig-color-secondary-label)"
-   :answered "var(--hig-palette-green)"})
+   :answered "var(--hig-palette-green)"
+   :misdirected "var(--hig-palette-red)"
+   :undeterminable "var(--hig-palette-purple)"})
 
 (defn- status-chip [status]
   [:span {:class "lf-status" :style {:color (get status-token status)}}
@@ -263,14 +266,21 @@
                       :what (if (= :inbound (:direction t))
                               (projection/describe-origin t)
                               (:doc-id t))
-                      :result (case (:result t)
-                                :ok "送信完了"
-                                :failed "送信失敗"
-                                "未確認")}))
+                      :result (cond
+                                (:misdirected? t) (status-chip :misdirected)
+                                (= :undeterminable (:direction-check t))
+                                (status-chip :undeterminable)
+                                :else (case (:result t)
+                                        :ok "送信完了"
+                                        :failed "送信失敗"
+                                        :pending "送信中"
+                                        "未確認"))}))
         :empty (ui/empty-state {:title "送達の記録がありません"})})
       [:p {:class "hig-caption1 lf-muted"}
        "送信確認は機械が応答したことを示すだけで、送達の証明ではありません。"
-       "受信した書面の本文は記録に載せず、digest のみを保持します。"]])))
+       "受信した書面の本文は記録に載せず、digest のみを保持します。"
+       "「誤送信」は経路が記録と異なる宛先へ送ったことを示し、"
+       "「照合不能」は照合の材料が無かったことを示します——後者は事故ではなく証跡の欠落です。"]])))
 
 (defn qa-panel
   "相談 Q&A. The state column is the whole point: 未回答 and 精査待ち fail
@@ -449,6 +459,8 @@
                   :status (when (pos? (:breached totals)) "要対応")})
       (ui/metric {:label "未処理の相談" :value (str (:qa-open totals))})
       (ui/metric {:label "結果未確認の送達" :value (str (:transmissions-unconfirmed totals))})
+      (ui/metric {:label "誤送信" :value (str (:misdirected totals))
+                  :status (when (pos? (:misdirected totals)) "守秘義務事故")})
       (ui/metric {:label "要再確認の宛先" :value (str (:stale-channels totals))
                   :status (when (pos? (:stale-channels totals)) "送達前に確認")})))))
 

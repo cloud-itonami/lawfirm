@@ -19,7 +19,8 @@
             [langgraph.graph :as g]
             [lawfirm.advisor :as advisor]
             [lawfirm.governor :as governor]
-            [lawfirm.store :as store]))
+            [lawfirm.store :as store]
+            [lawfirm.transmission :as transmission]))
 
 ;; ---------------------------------------------------------------------------
 ;; Effects — the only place the record changes, reached only through :commit
@@ -89,6 +90,18 @@
       ;; those is a separate fact with its own date and result.
       (:transmit-work-product :record-inbound-transmission)
       (store/register-transmission! store (:transmission proposal))
+
+      ;; The outcome upserts the 送達 it belongs to, and the misdirection
+      ;; verdict is computed from the record here rather than accepted from
+      ;; the payload — a transport must not get to report on itself.
+      :confirm-transmission
+      (let [c (:transmission-confirmation proposal)
+            known (->> (store/transmissions-of store (:matter-id c))
+                       (filter #(= (:transmission-id c) (:transmission-id %)))
+                       first)]
+        (when known
+          (store/register-transmission!
+           store (transmission/apply-confirmation store known c))))
 
       :record-qa-question
       (store/register-qa-question! store (:qa-question proposal))
