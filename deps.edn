@@ -15,6 +15,18 @@
         {:git/url "https://github.com/kotoba-lang/langgraph.git"
          :git/sha "577a59a9d5eb3ef90b81342f4673973f481ff7f4"}
 
+        ;; `lawfirm.projection` emits these types rather than ad-hoc maps, so
+        ;; a host that already speaks the workspace does not have to translate
+        ;; — and so the projection is checked by the same models the host
+        ;; reads with. Both are portable `.cljc` with no network, no clock and
+        ;; no filesystem; they add types, not authority.
+        io.github.kotoba-lang/calendar
+        {:git/url "https://github.com/kotoba-lang/calendar.git"
+         :git/sha "2d9b9fc5efe80ea42afaa30bbdf8915fe4d9540f"}
+        io.github.kotoba-lang/drive
+        {:git/url "https://github.com/kotoba-lang/drive.git"
+         :git/sha "31df8f6ac6013bc1844dc812c6cabc7c0b41e739"}
+
         ;; The fleet-shared verdict assembly + provenance rules. Not a
         ;; hand-copy: the same five lines existed in 376 governors here and one
         ;; had drifted (ADR-2607309100).
