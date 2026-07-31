@@ -60,6 +60,36 @@
                                            only through an unexpired grant
                                            carrying the capability
                                            (秘密保持義務).
+   14. `lawfirm.transmission/outbound-violations`
+                                         — 送達. The destination must be a
+                                           registered, currently-verified
+                                           recipient on this matter, the
+                                           document must already be 発出済,
+                                           and the channel must not be one
+                                           the document cannot lawfully take.
+                                           誤送信 is the most common
+                                           confidentiality incident in
+                                           practice and it has one structural
+                                           cause: a destination typed at send
+                                           time.
+   15. :recipient-verifier-not-counsel   — a 送達先 is registered on a
+                                           弁護士's verification. An
+                                           unverified destination is the same
+                                           hazard as an unverified counsel.
+   16. `lawfirm.qa/send-violations`      — a 相談回答 leaves only if a
+                                           verified 弁護士 personally examined
+                                           it, and a pre-engagement question
+                                           carries its own conflict screen
+                                           (the matter-scoped ones say nothing
+                                           about a questioner with no matter).
+   17. :qa-reviewer-not-counsel          — and only a verified 弁護士 may
+                                           record that examination.
+   18. :prose-in-record                  — an intake, an arriving fax and a
+                                           question carry a digest, never the
+                                           text. `lawfirm.intake` explains
+                                           why; this invariant is what stops
+                                           it from being a convention that
+                                           erodes.
 
   ## Escalation (`:escalate? true` → human 弁護士 sign-off, regardless of
   confidence)
@@ -67,12 +97,20 @@
   Everything that changes the practice's obligations to a client, a court or
   a counterparty. These are escalated because they are *decisions*, not
   because the model is unsure: 受任, 提出, 出金, 和解, 辞任, 書面の外部送付,
-  共同受任の招請. Plus any proposal below `confidence-floor`."
+  送達, 相談回答の送信, 共同受任の招請. Plus any proposal below
+  `confidence-floor`.
+
+  Recording something that *arrived* is not on that list. An inbound fax and a
+  client's question are facts about the world, and a practice that needs
+  sign-off before it may write down what it received will simply not write it
+  down."
   (:require [governor.core :as gov]
             [lawfirm.conflict :as conflict]
             [lawfirm.deadline :as deadline]
             [lawfirm.partner :as partner]
+            [lawfirm.qa :as qa]
             [lawfirm.store :as store]
+            [lawfirm.transmission :as transmission]
             [lawfirm.trust :as trust]))
 
 (def confidence-floor 0.6)
@@ -87,31 +125,64 @@
     :settle
     :withdraw-representation
     :issue-work-product
+    :transmit-work-product
+    :send-qa-answer
     :invite-partner-counsel})
 
 (def ^:private matter-scoped-ops
-  "Ops that must cite a registered matter belonging to the requesting client."
+  "Ops that must cite a registered matter belonging to the requesting client.
+
+  `:send-qa-answer` and `:record-qa-question` are deliberately absent: a
+  法律相談 arrives before there is a matter, and requiring one here would
+  either block the front door or push practices into opening a matter for
+  every enquiry — which is itself a 利益相反 hazard. `lawfirm.qa` carries the
+  screen those questions need instead."
   #{:run-conflict-check :record-time-entry :prepare-work-product
-    :review-work-product :issue-work-product :receive-trust :disburse-trust
+    :review-work-product :issue-work-product :transmit-work-product
+    :register-recipient :receive-trust :disburse-trust
     :issue-invoice :accept-representation :file-with-court :settle
     :withdraw-representation :invite-partner-counsel :remediate-deadline})
 
 (def ^:private billable-ops
-  "Ops that consume the registered engagement scope."
-  #{:record-time-entry :prepare-work-product})
+  "Ops that consume the registered engagement scope. Drafting an answer to a
+  client's question is billable work on the matter for the same reason
+  drafting a 書面 is; leaving it out would make 'answer by email' the way to
+  do unmetered work."
+  #{:record-time-entry :prepare-work-product :draft-qa-answer})
 
 (def ^:private deadline-exempt-ops
   "Ops that may proceed on a matter with a lapsed critical deadline, because
   they are how a practice *responds* to one. `:withdraw-representation` is
-  here for the same reason: 辞任 may be the only remaining correct act."
+  here for the same reason: 辞任 may be the only remaining correct act.
+
+  The two recording ops are here on a different argument: refusing to write
+  down an arriving fax or a client's question because the matter is already
+  in breach destroys the evidence of what the practice was told and when."
   #{:run-conflict-check :remediate-deadline :withdraw-representation
-    :file-with-court :record-time-entry})
+    :file-with-court :record-time-entry
+    :record-inbound-transmission :record-qa-question})
+
+(def prose-keys
+  "Keys whose presence on an intake, an arrival or a question means the text
+  itself is about to enter the record. `lawfirm.intake` explains why it must
+  not: at the front door there is no privilege yet to protect it with, and a
+  record layer that holds the prose is a record layer that leaks it."
+  #{:body :text :content :summary :message :prose})
+
+(defn- prose-violations [label m]
+  (let [found (filter #(some? (get m %)) prose-keys)]
+    (when (seq found)
+      [{:rule :prose-in-record
+        :detail (str label "に本文が含まれている（" (pr-str (vec found))
+                     "）。記録に載せてよいのは分類と digest のみで、"
+                     "本文はこの記録層が到達しない場所に置く")}])))
 
 (defn- conflict-required? [op] (not= :run-conflict-check op))
 
 (defn- hard-violations
   [store {:keys [request proposal context]} me c m]
-  (let [{:keys [op billable-hours doc-id grant trust-entry]} proposal
+  (let [{:keys [op billable-hours doc-id grant trust-entry
+                transmission recipient qa-question answer-id]} proposal
         today (:today context)
         billable? (contains? billable-ops op)
         matter? (contains? matter-scoped-ops op)
@@ -200,7 +271,44 @@
                                      today)))
       (conj {:rule :privilege-boundary
              :detail (str "grant " (pr-str (:on-behalf-of-grant request))
-                          " は失効しているか当該 capability を含まない（秘密保持義務）")}))))
+                          " は失効しているか当該 capability を含まない（秘密保持義務）")})
+
+      ;; 14 — 送達. The destination comes from the record or it does not
+      ;; happen. Checked whenever an outbound transmission is proposed, not
+      ;; only for `:transmit-work-product`, so a future op cannot route around
+      ;; it by carrying a transmission under a different name.
+      (= :outbound (:direction transmission))
+      (into (transmission/outbound-violations store transmission today))
+
+      ;; 15 — a 送達先 is only as good as the person who checked it.
+      (= :register-recipient op)
+      (into (for [[ch coord] (:channels recipient)
+                  :when (not (partner/verified-active?
+                              (store/bengoshi store (:verified-by coord)) today))]
+              {:rule :recipient-verifier-not-counsel
+               :detail (str (get transmission/channel-labels ch (name ch))
+                            " の宛先確認者 " (pr-str (:verified-by coord))
+                            " が有効な弁護士登録として確認できない")}))
+
+      ;; 16 — a 相談回答 is 法律事務, and travels the same ladder as a 書面.
+      (= :send-qa-answer op)
+      (into (qa/send-violations store answer-id today))
+
+      ;; 17 — and only a 弁護士 may record having examined one.
+      (and (= :review-qa-answer op)
+           (not (partner/verified-active?
+                 (store/bengoshi store (or (:reviewed-by proposal)
+                                           (:bengoshi-id request)))
+                 today)))
+      (conj {:rule :qa-reviewer-not-counsel
+             :detail "回答の精査は有効登録の弁護士のみが行える"})
+
+      ;; 18 — the no-prose promise, enforced rather than agreed to.
+      (some? transmission)
+      (into (prose-violations "受信記録" transmission))
+
+      (some? qa-question)
+      (into (prose-violations "質問の記録" qa-question)))))
 
 (defn check
   "Assess `proposal` against the registered record. Pure: never mutates the

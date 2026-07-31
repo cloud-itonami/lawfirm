@@ -219,6 +219,77 @@
 精査者が有効な弁護士登録として確認できない場合は、`:lawyer-reviewed` になっていても
 発出が hold される（`:reviewer-not-counsel`）。
 
+### 4.1.5 送達 — 宛先を「登録」してから「送る」
+
+発出（`:issue-work-product`）と送達（`:transmit-work-product`）は**別の行為**。
+発出は「外に出してよい」という判断、送達は「誰に・どの経路で出したか」の記録。
+同じ書面が裁判所・相手方代理人・依頼者へ行くのは普通のことで、それぞれ別の記録になる。
+
+**宛先は送信時に入力しない。** 先に登録する。
+
+```clojure
+;; 宛先の登録。確認した弁護士と確認日が必須（確認者が有効登録でなければ HOLD）
+(actor/run-request! g {:client-id "C-1" :matter-id "M-1" :bengoshi-id "B-1"
+                       :op :register-recipient
+                       :recipient {:recipient-id "R-1" :matter-id "M-1"
+                                   :name "東京地方裁判所 民事第○部" :role :court
+                                   :channels {:fax {:number "03-XXXX-0001"
+                                                    :verified-by "B-1"
+                                                    :verified-on "2026-07-01"}}}}
+                    ctx "t5")
+
+;; 送達は escalate。宛先は recipient-id で指す（番号は書かない）
+(actor/run-request! g {... :op :transmit-work-product :doc-id "W-9"
+                       :transmission {:transmission-id "TX-1" :matter-id "M-1"
+                                      :direction :outbound :channel :fax
+                                      :doc-id "W-9" :recipient-id "R-1"
+                                      :sent-on "2026-07-30" :page-count 12}}
+                    ctx "t6")
+(actor/approve! g "t6" {:by "B-1" :on "2026-07-30"})
+```
+
+hold になる主なケース:
+
+| 症状 | 規則 | 対処 |
+|---|---|---|
+| 宛先が登録されていない | `:recipient-not-registered` | 先に `:register-recipient` |
+| 確認から180日超 | `:recipient-channel-unverified` | 弁護士が再確認して `:verified-on` を更新 |
+| 書面がまだ `:draft` | `:work-product-not-issued` | 先に精査 → 発出 |
+| 訴状を裁判所へ FAX | `:channel-forbidden-for-document` | 経路を変える（民事訴訟規則3条1項） |
+
+**制約表に載っていない組合せは「可」ではない。** 表は確信を持って「不可」と言える
+ものだけを載せている。だから送達は確信度に関わらず必ず弁護士の承認を要する。
+
+受信（FAX・郵便・メール）は `:record-inbound-transmission` で記録する。**承認は不要**
+だが、**本文は記録に載せられない**（`:digest` のみ。載せると `:prose-in-record` で hold）。
+コンソールに出る発信元は末尾4桁だけ——コンソールは共有されるものなので。
+
+### 4.1.6 相談 Q&A — 回答は書面と同じはしごを通る
+
+「短いから」「メールだから」で軽い経路にしない。回答は 起案 → 弁護士精査 → 送信。
+
+```clojure
+(actor/run-request! g {... :op :record-qa-question
+                       :qa-question {:question-id "Q-1" :matter-id "M-1"
+                                     :client-id "C-1" :asked-on "2026-07-27"
+                                     :channel :email :digest "sha256:…"
+                                     :kind :legal-advice}} ctx "t7")   ; 承認不要
+(actor/run-request! g {... :op :draft-qa-answer :billable-hours 1
+                       :qa-answer {:answer-id "A-1" :question-id "Q-1"
+                                   :matter-id "M-1" :drafted-by "B-1"}} ctx "t8")
+(actor/run-request! g {... :op :review-qa-answer :answer-id "A-1"
+                       :reviewed-by "B-1" :reviewed-on "2026-07-29"} ctx "t9")
+(actor/run-request! g {... :op :send-qa-answer :answer-id "A-1"
+                       :sent-on "2026-07-30"} ctx "t10")
+(actor/approve! g "t10" {:by "B-1" :on "2026-07-30"})
+```
+
+**受任前の相談**（`:matter-id` が無い質問）は、事件単位の利益相反判定では捕捉されない。
+その相談者に対する日付入りのスクリーン（`:screened-by` / `:screened-on` /
+`:screen-cleared?`）を質問レコードに持たせないと送信できない（`:qa-conflict-not-screened`）。
+
+送信済みの回答は書き換えない。訂正は**新しい回答を起案する**（`:qa-answer-already-sent`）。
+
 ### 4.2 時間の計上
 
 計上済み＋今回の合計が `:max-billable-hours` を超えると HARD hold
@@ -322,10 +393,40 @@ clojure -M:render-console out.html
 
 ## 8. 永続化と本番配備について
 
-現在の `MemStore` はプロセス内。実運用では `lawfirm.store/Store` を
-永続バックエンドで実装する（`langchain-store` の entity-store パターンが
-このワークスペースの標準）。**プロトコルの外側は一切変わらない**——
-governor も console も `Store` 越しにしか喋っていない。
+`mem-store` はプロセス内。実運用では `durable-store` を使う——
+`:persist!` に「db を受け取って書く関数」を渡すだけで、**プロトコルの外側は
+一切変わらない**（governor も console も `Store` 越しにしか喋っていない）。
+
+```clojure
+(def store
+  (store/durable-store
+   {:snapshot (read-snapshot-from-somewhere)     ; 前回の db、無ければ省略
+    :persist! (fn [db] (write-snapshot! db))}))  ; host 側の1関数
+```
+
+`persist!` はこの記録層が host に触れる唯一の場所。`.cljc` の可搬性のため
+`slurp`/`spit` は入れていない（CLAUDE.md の runtime 優先順位）。
+書き込みごとに db 全体を渡すので、一件記録が大きくなればコストは線形に増える。
+本物の entity store（`langchain-store` の entity-store パターン）への差し替えは
+`lawfirm.store` より上を変えない。
+
+各スナップショットは `:lawfirm.store/version` を持つ。**host は自分が既に書いた
+version より古いスナップショットを捨てること**——受理された書き込み2件が遅い
+host に順不同で届きうるのは host しか知らないので、その判定は host の責任。
+
+### workspace（drive / calendar / inbox / 送信ゲートウェイ）への接続
+
+`lawfirm.workspace` の protocol を host が実装する。方向は片道:
+
+- **入**: `inbound-requests` が到着物を actor の**リクエスト**に変える。
+  記録にはならない——メールサーバの主張が事務所の事実になるのはゲートを通ってから。
+- **出**: `publish-docket!` / `publish-matter-drive!` が
+  `lawfirm.projection` の値を push する。投影は読み取り専用なので、
+  カレンダーが期限を動かすことはない。
+- **送信**: `dispatch-plan` が返す plan を host のゲートウェイが実行する。
+  **番号は記録から引き直される**ので、ゲートが見ているものとダイヤルされるものが
+  ずれない。plan が組めないときは `{:ok? false :reason ...}` を返す——
+  半端な plan を返すと host が手元の何かでフォールバックしうる。
 
 HTTP の入口（Worker ingress）は cljs 側の責務。Kotoba には現時点で
 ingress capability がないため（CLAUDE.md）、エントリポイントは cljs のままにする。

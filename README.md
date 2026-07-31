@@ -4,7 +4,7 @@
 langgraph StateGraph の governed actor（`LawFirmAdvisor ⊣ LawFirmGovernor`）として実装し、
 台帳は commit も hold も両方積む append-only。
 
-**成熟度: `:implemented`.** 81 tests / 377 assertions green（`clojure -M:test`）、
+**成熟度: `:implemented`.** 138 tests / 568 assertions green（`clojure -M:test`）、
 `clojure -M:lint` warnings 0、レンダリング済みコンソールは
 [design-quality](https://github.com/kotoba-lang/design-quality) の決定論的
 HIG/WCAG 監査で **100.00 / 100**。
@@ -32,14 +32,18 @@ HIG/WCAG 監査で **100.00 / 100**。
 
 | namespace | 役割 |
 |---|---|
-| [`lawfirm.store`](src/lawfirm/store.cljc) | 記録層の SSoT。弁護士・依頼者・事件・利益相反・期限・時間・預り金・請求・書面・共同受任 grant・台帳 |
+| [`lawfirm.store`](src/lawfirm/store.cljc) | 記録層の SSoT。弁護士・依頼者・事件・利益相反・期限・時間・預り金・請求・書面・共同受任 grant・送達先・送達・相談Q&A・台帳。`mem-store` と `durable-store` の2実装が**同じ純関数群に委譲**するので乖離しない |
 | [`lawfirm.conflict`](src/lawfirm/conflict.cljc) | 利益相反スクリーン（職務基本規程27条・28条の7類型） |
 | [`lawfirm.deadline`](src/lawfirm/deadline.cljc) | 期限管理。民法140条 初日不算入 / 143条 暦計算 / 142条 休日繰越、条文付きの法定期間表 |
 | [`lawfirm.trust`](src/lawfirm/trust.cljc) | 預り金の分別管理（日弁連 預り金等の取扱いに関する規程） |
 | [`lawfirm.partner`](src/lawfirm/partner.cljc) | 提携弁護士。資格確認・適合度マッチング・共同受任 grant・獲得ファネル |
+| [`lawfirm.transmission`](src/lawfirm/transmission.cljc) | 送達（FAX・郵便・メール・持参・電子提出）。**宛先は事前登録された recipient からしか選べない** — 誤送信の構造的封じ込め |
+| [`lawfirm.qa`](src/lawfirm/qa.cljc) | 相談 Q&A。回答は書面と同じ draft → 弁護士精査 → 送信のはしごを通る |
+| [`lawfirm.projection`](src/lawfirm/projection.cljc) | 記録 → workspace 型（`calendar.model` / `drive.model`）とポータル向け summary への**一方向**投影 |
+| [`lawfirm.workspace`](src/lawfirm/workspace.cljc) | host が実装する port（inbox / drive / calendar / 送信ゲートウェイ）と、到着物を actor の **request** に変える入口 |
 | [`lawfirm.intake`](src/lawfirm/intake.cljc) | 相談受付のトリアージ。本文は記録に載せない |
 | [`lawfirm.advisor`](src/lawfirm/advisor.cljc) | LLM を封じ込める唯一のノード。提案しか返さない |
-| [`lawfirm.governor`](src/lawfirm/governor.cljc) | ゲート。13 の HARD 不変条件 + 7 の必須承認操作。verdict 組み立てと provenance 4規則は [`kotoba-lang/governor`](https://github.com/kotoba-lang/governor) を使う（fleet で 376 repo に手で複製され、1件が乖離していた層 — ADR-2607309100） |
+| [`lawfirm.governor`](src/lawfirm/governor.cljc) | ゲート。18 の HARD 不変条件 + 9 の必須承認操作。verdict 組み立てと provenance 4規則は [`kotoba-lang/governor`](https://github.com/kotoba-lang/governor) を使う（fleet で 376 repo に手で複製され、1件が乖離していた層 — ADR-2607309100） |
 | [`lawfirm.actor`](src/lawfirm/actor.cljc) | StateGraph。`intake → advise → govern → decide → commit \| request-approval \| hold` |
 | [`lawfirm.console`](src/lawfirm/console.cljc) | 弁護士コンソール（kotoba-ui、pure `.cljc` hiccup、SSR） |
 | [`lawfirm.demo`](src/lawfirm/demo.cljc) | サンプル事務所。テストとデモページが**同じ記録**を使う |
@@ -72,9 +76,28 @@ HIG/WCAG 監査で **100.00 / 100**。
 | 11 | 精査できるのは有効登録の弁護士のみ | 同上 |
 | 12 | 重要期限が徒過している事件で通常業務を進められない（是正・提出・辞任・時間記録は可） | 弁護過誤の防止 |
 | 13 | 共同受任先への開示は、失効していない grant の capability 範囲内でのみ | 秘密保持義務 |
+| 14 | 送達先は事件に登録済みで、その経路の宛先を弁護士が180日以内に確認していること。発出済（`:issued`）でない書面は送達できない。書面種別が取れない経路では送達できない | 誤送信の防止 / 民事訴訟規則3条1項 |
+| 15 | 送達先の登録は、有効登録の弁護士による確認記録を伴うこと | 同上 |
+| 16 | 弁護士が自ら精査した記録のない相談回答は送信できない。受任前の相談は、その相談者に対する日付入りの利益相反スクリーンを要する | 法務省 2023年ガイドライン / 規程27条 |
+| 17 | 相談回答を精査できるのは有効登録の弁護士のみ | 同上 |
+| 18 | 受付・受信記録・質問の記録に**本文を入れられない**（分類と digest のみ） | 秘密保持義務 |
 
 **必ず弁護士の承認を要する操作**（確信度に関わらず）: 受任・裁判所への提出・預り金の出金・
-和解・辞任・書面の外部送付・共同受任の招請。加えて確信度が 0.6 未満の提案。
+和解・辞任・書面の外部送付・**送達**・**相談回答の送信**・共同受任の招請。
+加えて確信度が 0.6 未満の提案。
+
+**到着したものの記録は承認を要しない。** 受信した FAX と依頼者からの質問は世界についての
+事実であって判断ではなく、書き留めるのに承認が要る事務所は、単に書き留めない。
+
+### 14 が「宛先フィールド」ではなく「宛先レコード」である理由
+
+誤送信は日本の法律事務所で最も多い守秘義務事故で、構造的な原因は1つ——**宛先が、
+いちばん急いでいる人によって、紙に書かれた番号から、送信の瞬間に入力される**こと。
+だから送達に宛先フィールドは無い。送達は `recipient-id` を指し、recipient は事件に
+登録されたレコードで、各経路の宛先を「誰が」「いつ」確認したかを持つ。登録されていない
+番号には送れず、2年前に確認した番号は stale として弾かれる（番号は再割当される）。
+`workspace/dispatch-plan` が送信ゲートウェイに渡す番号も**記録から引き直す**ので、
+ゲートが見ている番号とモデムがダイヤルする番号がずれることがない。
 
 ### 4 と 5 が別々である理由
 
@@ -90,7 +113,7 @@ HIG/WCAG 監査で **100.00 / 100**。
 ## 使う
 
 ```bash
-clojure -M:test              # 81 tests / 377 assertions
+clojure -M:test              # 138 tests / 568 assertions
 clojure -M:lint              # clj-kondo, errors fail
 clojure -M:render-console    # docs/samples/lawyer-console.html を再生成
 ```
@@ -131,12 +154,25 @@ clojure -M:render-console    # docs/samples/lawyer-console.html を再生成
 2. **法定期間表（`deadline/statutory`）は起案の補助であって権威ではない。**
    起算点の判定は弁護士が行う。休日繰越（民法142条）は休日カレンダーを渡したときだけ働き、
    渡さなければ延長しない側に倒れる。
-3. **`MemStore` はプロセス内。** 永続化は `lawfirm.store/Store` の別実装で、
-   プロトコルの外は変わらない。
+3. **永続化はスナップショット全書き。** `store/durable-store` は受理した書き込みごとに
+   db 全体を `:persist!` に渡す。正しく、部分書き込みの中間状態を持たないが、
+   一件記録が大きくなると1操作あたりのコストが線形に増える。プロトコル境界があるので、
+   本物の entity store への差し替えは `lawfirm.store` より上を変えない。
+   `persist!` はこの名前空間が host に触れる唯一の場所で、`slurp`/`spit` は入れない
+   （`.cljc` の可搬性 — CLAUDE.md の runtime 優先順位）。
 4. **HTTP の入口は無い。** Kotoba には現時点で ingress capability が無いため
    （CLAUDE.md）、Worker のエントリポイントは cljs 側の責務。
 5. **コンソールの `:act` ボタンは何もしない。** SSR の意味論しか持たない。
    トランスポートへの結線はホストの仕事。
+6. **送達経路の制約表（`transmission/channel-restrictions`）も起案の補助であって
+   権威ではない。** 確信を持って「不可」と言える組合せだけを載せている。表に**無い**
+   組合せは「可」ではなく `:requires-counsel-judgement` であり、それが送達を無条件に
+   escalate している理由。
+7. **FAX の送信確認は送達の証明ではない。** `:result` は機械が応答したことしか
+   記録しない。送達の証明（送達報告書・配達証明）はそれ自体が別の書面であって、
+   ここのフラグではない。
+8. **投影は一方向で、戻す口は無い。** カレンダーやドライブ側の編集は記録に反映されない。
+   これは欠落ではなく設計で、`lawfirm.projection` の docstring に理由を書いてある。
 
 ---
 

@@ -81,6 +81,34 @@
       :invite-partner-counsel
       (store/register-counsel-grant! store (:grant proposal))
 
+      :register-recipient
+      (store/register-recipient! store (:recipient proposal))
+
+      ;; Both directions append rather than upsert: the same 書面 lawfully
+      ;; goes to the court, the opposing counsel and the client, and each of
+      ;; those is a separate fact with its own date and result.
+      (:transmit-work-product :record-inbound-transmission)
+      (store/register-transmission! store (:transmission proposal))
+
+      :record-qa-question
+      (store/register-qa-question! store (:qa-question proposal))
+
+      :draft-qa-answer
+      (store/register-qa-answer!
+       store (assoc (:qa-answer proposal) :status :draft))
+
+      :review-qa-answer
+      (when-let [a (store/qa-answer store (:answer-id proposal))]
+        (store/register-qa-answer!
+         store (assoc a :status :lawyer-reviewed
+                      :reviewed-by (or (:reviewed-by proposal) (:bengoshi-id request))
+                      :reviewed-on (:reviewed-on proposal))))
+
+      :send-qa-answer
+      (when-let [a (store/qa-answer store (:answer-id proposal))]
+        (store/register-qa-answer!
+         store (assoc a :status :sent :sent-on (:sent-on proposal))))
+
       :remediate-deadline
       (when-let [d (first (filter #(= (:deadline-id proposal) (:deadline-id %))
                                   (store/deadlines-of store matter-id)))]

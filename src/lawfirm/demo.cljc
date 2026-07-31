@@ -1,7 +1,14 @@
 (ns lawfirm.demo
   "A sample practice — one open matter mid-flight, with the records a real
   一件記録 carries: a signed 利益相反 clearance, a 委任契約, recorded time, a
-  預り金 balance and a live 控訴期間.
+  預り金 balance, a live 控訴期間, registered 送達先 and their transmissions,
+  and a 相談 Q&A thread in each of the states the metrics distinguish.
+
+  Two of those records are deliberately in a *bad* state, because a fixture
+  where everything is fine proves only that the happy path renders: R-2's fax
+  number was last verified in January and is stale as of `today`, and A-2 is
+  reviewed but unsent — work sitting on a named 弁護士's desk rather than work
+  never started.
 
   It lives in `src` rather than `test` on purpose. The tests assert against
   this exact practice **and** `lawfirm.render-console` renders the sample page
@@ -83,6 +90,65 @@
 
     (store/register-work-product! s {:doc-id "W-1" :matter-id "M-1"
                                      :kind :準備書面 :status :draft})
+    (store/register-work-product! s {:doc-id "W-9" :matter-id "M-1"
+                                     :kind :準備書面 :status :issued
+                                     :reviewed-by "B-1" :reviewed-on "2026-07-18"
+                                     :object-ref "sha256:1f0c…"})
+
+    ;; 送達先. R-1's fax was checked this month; R-2's was checked in January
+    ;; and is therefore stale as of `today` — a live example of the state the
+    ;; practice is supposed to find *before* it tries to send, which is why
+    ;; `transmission/stale-channels` exists and why the console shows it.
+    (store/register-recipient! s {:recipient-id "R-1" :matter-id "M-1"
+                                  :name "東京地方裁判所 民事第○部" :role :court
+                                  :channels {:fax {:number "03-XXXX-0001"
+                                                   :verified-by "B-1"
+                                                   :verified-on "2026-07-01"}
+                                             :post {:address "東京都千代田区霞が関1-1-4"
+                                                    :verified-by "B-1"
+                                                    :verified-on "2026-07-01"}}})
+    (store/register-recipient! s {:recipient-id "R-2" :matter-id "M-1"
+                                  :name "丙山建設 訴訟代理人 戊田法律事務所"
+                                  :role :opposing-counsel
+                                  :channels {:fax {:number "03-XXXX-0002"
+                                                   :verified-by "B-1"
+                                                   :verified-on "2026-01-05"}}})
+
+    (store/register-transmission! s {:transmission-id "TX-1" :matter-id "M-1"
+                                     :direction :outbound :channel :fax
+                                     :doc-id "W-9" :recipient-id "R-1"
+                                     :sent-on "2026-07-20" :page-count 12
+                                     :result :ok})
+    (store/register-transmission! s {:transmission-id "TX-2" :matter-id "M-1"
+                                     :direction :outbound :channel :post
+                                     :doc-id "W-9" :recipient-id "R-2"
+                                     :sent-on "2026-07-21" :page-count 12})
+    (store/register-transmission! s {:transmission-id "IN-9001" :matter-id "M-1"
+                                     :direction :inbound :channel :fax
+                                     :sent-on "2026-07-25" :origin "03-XXXX-0002"
+                                     :page-count 3 :digest "sha256:9ab3…"})
+
+    ;; 相談 Q&A. Q-1 was answered; Q-2 is sitting on a 弁護士's desk in the
+    ;; reviewed-but-not-sent state, which is the one the metrics separate out
+    ;; because it fails differently from work that was never started.
+    (store/register-qa-question! s {:question-id "Q-1" :matter-id "M-1"
+                                    :client-id "C-1" :asked-on "2026-07-10"
+                                    :channel :email :digest "sha256:7c21…"
+                                    :kind :legal-advice :domain "corporate"})
+    (store/register-qa-answer! s {:answer-id "A-1" :question-id "Q-1"
+                                  :matter-id "M-1" :drafted-by "B-1"
+                                  :drafted-on "2026-07-12" :status :sent
+                                  :reviewed-by "B-1" :reviewed-on "2026-07-13"
+                                  :sent-on "2026-07-14" :digest "sha256:44ef…"})
+    (store/register-qa-question! s {:question-id "Q-2" :matter-id "M-1"
+                                    :client-id "C-1" :asked-on "2026-07-27"
+                                    :channel :email :digest "sha256:0b5d…"
+                                    :kind :legal-advice :domain "corporate"})
+    (store/register-qa-answer! s {:answer-id "A-2" :question-id "Q-2"
+                                  :matter-id "M-1" :drafted-by "B-1"
+                                  :drafted-on "2026-07-28" :status :lawyer-reviewed
+                                  :reviewed-by "B-1" :reviewed-on "2026-07-29"
+                                  :digest "sha256:c910…"})
     s))
 
 (def request-base

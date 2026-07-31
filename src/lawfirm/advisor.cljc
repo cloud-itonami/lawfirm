@@ -72,10 +72,18 @@
   record rather than checking the practice's own instruction. The model gets
   to choose the `:op`, the hours, the confidence and the rationale — the
   things a judgement is made of — and nothing that moves money or opens a
-  file."
-  [:matter-id :doc-id :deadline-id :invoice-id
+  file.
+
+  `:transmission` and `:recipient` are here for the sharpest version of the
+  same argument. `lawfirm.transmission` removes the destination from send time
+  so it cannot be mistyped; a model that could author `:recipient` would put
+  it back, and the number it invented would be checked by nothing — the
+  governor validates the destination *against the registered recipient*, and a
+  fabricated recipient is a fabricated check."
+  [:matter-id :doc-id :deadline-id :invoice-id :question-id :answer-id
    :work-product :time-entry :trust-entry :invoice :grant :conflict-check
-   :reviewed-by :reviewed-on])
+   :transmission :recipient :qa-question :qa-answer
+   :reviewed-by :reviewed-on :sent-on])
 
 (defn- carry-payload
   "Overlay the request's payload facts onto a proposal."

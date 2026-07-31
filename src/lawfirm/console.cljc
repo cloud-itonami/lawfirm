@@ -27,7 +27,10 @@
             [lawfirm.conflict :as conflict]
             [lawfirm.deadline :as deadline]
             [lawfirm.partner :as partner]
+            [lawfirm.projection :as projection]
+            [lawfirm.qa :as qa]
             [lawfirm.store :as store]
+            [lawfirm.transmission :as transmission]
             [lawfirm.trust :as trust]))
 
 (def theme
@@ -63,7 +66,13 @@
 
 (def ^:private status-label
   {:breached "徒過" :at-risk "期限間近" :pending "予定" :satisfied "完了"
-   :unknown "要確認"})
+   :unknown "要確認"
+   ;; 送達先の確認状態と Q&A の進行状態。One vocabulary rather than three, so
+   ;; a colour means the same thing everywhere on the page: red is something
+   ;; already wrong, orange is something about to be.
+   :verified "確認済" :stale "要再確認"
+   :unanswered "未回答" :awaiting-review "精査待ち"
+   :awaiting-send "送信待ち" :answered "回答済"})
 
 (def ^:private status-token
   "System palette tokens, not invented hex — the do/don't table names this
@@ -72,7 +81,13 @@
    :at-risk "var(--hig-palette-orange)"
    :pending "var(--hig-color-secondary-label)"
    :satisfied "var(--hig-palette-green)"
-   :unknown "var(--hig-palette-purple)"})
+   :unknown "var(--hig-palette-purple)"
+   :verified "var(--hig-palette-green)"
+   :stale "var(--hig-palette-red)"
+   :unanswered "var(--hig-palette-orange)"
+   :awaiting-review "var(--hig-palette-orange)"
+   :awaiting-send "var(--hig-color-secondary-label)"
+   :answered "var(--hig-palette-green)"})
 
 (defn- status-chip [status]
   [:span {:class "lf-status" :style {:color (get status-token status)}}
@@ -205,9 +220,100 @@
       [:p {:class "hig-caption1 lf-muted"}
        "弁護士が自ら精査していない書面は外部に出せません（法務省2023年ガイドライン）。"]])))
 
+(defn transmission-panel
+  "送達. The destinations come first and the sent rows second, because the
+  question a 弁護士 needs answered before sending is 'is this address still
+  good', not 'what did I send last week'."
+  [store m today]
+  (let [mid (:matter-id m)
+        rs (store/recipients-of store mid)
+        stale (set (map (juxt :recipient-id :channel)
+                        (transmission/stale-channels store mid today)))]
+    (app/panel
+     [[:h3 {:class "hig-headline"} "送達"]
+      (ui/data-table
+       {:caption "登録済みの送達先"
+        :columns [{:key :name :label "送達先"}
+                  {:key :role :label "立場"}
+                  {:key :channel :label "経路"}
+                  {:key :state :label "確認"}
+                  {:key :on :label "確認日"}]
+        :rows (vec (for [r rs
+                         [ch coord] (sort-by key (:channels r))]
+                     {:name (:name r)
+                      :role (some-> (:role r) name)
+                      :channel (get transmission/channel-labels ch (name ch))
+                      :state (status-chip (if (contains? stale [(:recipient-id r) ch])
+                                            :stale :verified))
+                      :on (or (:verified-on coord) "未記録")}))
+        :empty (ui/empty-state
+                {:title "送達先が登録されていません"
+                 :body "宛先は送信時に入力するものではなく、事前に登録して弁護士が確認したものから選びます。"})})
+      (ui/data-table
+       {:caption "送達記録"
+        :columns [{:key :on :label "日付"}
+                  {:key :dir :label "方向"}
+                  {:key :channel :label "経路"}
+                  {:key :what :label "書面 / 発信元"}
+                  {:key :result :label "結果"}]
+        :rows (vec (for [t (store/transmissions-of store mid)]
+                     {:on (:sent-on t)
+                      :dir (if (= :inbound (:direction t)) (ui/badge "受信") (ui/badge "発信"))
+                      :channel (get transmission/channel-labels (:channel t) (some-> (:channel t) name))
+                      :what (if (= :inbound (:direction t))
+                              (projection/describe-origin t)
+                              (:doc-id t))
+                      :result (case (:result t)
+                                :ok "送信完了"
+                                :failed "送信失敗"
+                                "未確認")}))
+        :empty (ui/empty-state {:title "送達の記録がありません"})})
+      [:p {:class "hig-caption1 lf-muted"}
+       "送信確認は機械が応答したことを示すだけで、送達の証明ではありません。"
+       "受信した書面の本文は記録に載せず、digest のみを保持します。"]])))
+
+(defn qa-panel
+  "相談 Q&A. The state column is the whole point: 未回答 and 精査待ち fail
+  differently, and a practice that counts them together cannot tell work not
+  started from work waiting on a named person."
+  [store m]
+  (let [mid (:matter-id m)
+        qs (qa/matter-questions store mid)
+        mx (qa/metrics store mid)]
+    (app/panel
+     [[:h3 {:class "hig-headline"} "相談 Q&A"]
+      (ui/grid
+       {:min "150px"}
+       (ui/metric {:label "未回答" :value (str (get-in mx [:by-state :unanswered] 0))})
+       (ui/metric {:label "精査待ち" :value (str (get-in mx [:by-state :awaiting-review] 0))})
+       (ui/metric {:label "回答までの中央値"
+                   :value (if-let [d (:median-response-days mx)] (str d "日") "—")
+                   :detail (when-let [d (:longest-response-days mx)]
+                             (str "最長 " d "日"))}))
+      (ui/data-table
+       {:columns [{:key :on :label "受付"}
+                  {:key :state :label "状態"}
+                  {:key :kind :label "種別"}
+                  {:key :channel :label "経路"}
+                  {:key :reviewer :label "精査した弁護士"}]
+        :rows (vec (for [q qs
+                         :let [a (qa/latest-answer store (:question-id q))]]
+                     {:on (:asked-on q)
+                      :state (status-chip (:state q))
+                      :kind (case (:kind q)
+                              :legal-advice "法的助言"
+                              :general-information "一般的情報"
+                              "—")
+                      :channel (get transmission/channel-labels (:channel q)
+                                    (some-> (:channel q) name))
+                      :reviewer (or (:reviewed-by a) "—")}))
+        :empty (ui/empty-state {:title "相談の記録がありません"})})
+      [:p {:class "hig-caption1 lf-muted"}
+       "弁護士が自ら精査していない回答は送信できません。短い回答であることは例外の理由になりません。"]])))
+
 (defn matter-view
   "One matter, whole."
-  [store m]
+  [store m today]
   (ui/section
    {:title (str (:matter-id m) "　" (:name m)) :wide true}
    [:p {:class "hig-subheadline lf-muted"}
@@ -219,7 +325,9 @@
     (conflict-panel store m)
     (engagement-panel store m)
     (trust-panel store m)
-    (documents-panel store m))))
+    (documents-panel store m)
+    (transmission-panel store m today)
+    (qa-panel store m))))
 
 ;; ---------------------------------------------------------------------------
 ;; Approvals — the escalation queue
@@ -326,6 +434,24 @@
                    {:act [:open-matter (:matter-id m)]
                     :trailing (ui/badge (some-> (:status m) name))})))])
 
+(defn practice-view
+  "事務所全体. Read from `lawfirm.projection/practice-summary` — the same
+  value a portal outside this repository renders, so the office console and
+  the company portal cannot show different numbers for the same practice."
+  [store today]
+  (let [{:keys [totals]} (projection/practice-summary store today)]
+    (ui/section
+     {:title "事務所全体" :wide true :id "practice"}
+     (ui/grid
+      {:min "180px"}
+      (ui/metric {:label "事件" :value (str (:matters totals))})
+      (ui/metric {:label "徒過" :value (str (:breached totals))
+                  :status (when (pos? (:breached totals)) "要対応")})
+      (ui/metric {:label "未処理の相談" :value (str (:qa-open totals))})
+      (ui/metric {:label "結果未確認の送達" :value (str (:transmissions-unconfirmed totals))})
+      (ui/metric {:label "要再確認の宛先" :value (str (:stale-channels totals))
+                  :status (when (pos? (:stale-channels totals)) "送達前に確認")})))))
+
 (defn view
   "The whole console. `opts`: `:matter-id` (detail pane), `:pending`
   (approval queue), `:partner` (`{:matter-spec :funnel-records}`)."
@@ -335,8 +461,9 @@
                      {:trailing [(ui/badge today)]})
     :sidebar (sidebar store matter-id)}
    (docket-view store today)
+   (practice-view store today)
    (approvals-view pending)
-   (when matter-id (matter-view store (store/matter store matter-id)))
+   (when matter-id (matter-view store (store/matter store matter-id) today))
    (partners-view store today (or partner {}))))
 
 (defn render
