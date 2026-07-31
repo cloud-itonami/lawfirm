@@ -168,7 +168,15 @@
      :qa (qa/metrics store matter-id)
      :transmissions {:by-channel (transmission/channel-mix store matter-id)
                      :unconfirmed (count (transmission/unconfirmed store matter-id))
-                     :stale-channels (count (transmission/stale-channels store matter-id today))}}))
+                     :stale-channels (count (transmission/stale-channels store matter-id today))
+                     ;; An incident count, not a metric. One row here is a
+                     ;; document that reached somewhere the record did not
+                     ;; name — a confidentiality event with duties attached,
+                     ;; which is why it is carried separately from
+                     ;; `:undeterminable` below rather than summed with it.
+                     :misdirected (count (transmission/misdirected store matter-id))
+                     :undeterminable (count (transmission/undeterminable-direction
+                                             store matter-id))}}))
 
 (defn practice-summary
   "The whole practice as one portable map — the shape a portal (kaisya)
@@ -188,6 +196,8 @@
                                         summaries))
               :transmissions-unconfirmed
               (reduce + 0 (map #(get-in % [:transmissions :unconfirmed]) summaries))
+              :misdirected
+              (reduce + 0 (map #(get-in % [:transmissions :misdirected]) summaries))
               :stale-channels
               (reduce + 0 (map #(get-in % [:transmissions :stale-channels]) summaries))}}))
 

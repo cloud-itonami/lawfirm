@@ -90,6 +90,16 @@
                                            why; this invariant is what stops
                                            it from being a convention that
                                            erodes.
+   19. `lawfirm.transmission/confirmation-violations`
+                                         — a 送達 outcome may only be recorded
+                                           against an outbound 送達 that
+                                           exists. Notably NOT here: a
+                                           mismatch between the number a
+                                           transport dialled and the
+                                           registered one. The document has
+                                           already left; refusing to write
+                                           down where it went would destroy
+                                           the evidence of the incident.
 
   ## Escalation (`:escalate? true` → human 弁護士 sign-off, regardless of
   confidence)
@@ -160,7 +170,7 @@
   in breach destroys the evidence of what the practice was told and when."
   #{:run-conflict-check :remediate-deadline :withdraw-representation
     :file-with-court :record-time-entry
-    :record-inbound-transmission :record-qa-question})
+    :record-inbound-transmission :record-qa-question :confirm-transmission})
 
 (def prose-keys
   "Keys whose presence on an intake, an arrival or a question means the text
@@ -182,7 +192,8 @@
 (defn- hard-violations
   [store {:keys [request proposal context]} me c m]
   (let [{:keys [op billable-hours doc-id grant trust-entry
-                transmission recipient qa-question answer-id]} proposal
+                transmission recipient qa-question answer-id
+                transmission-confirmation]} proposal
         today (:today context)
         billable? (contains? billable-ops op)
         matter? (contains? matter-scoped-ops op)
@@ -308,7 +319,18 @@
       (into (prose-violations "受信記録" transmission))
 
       (some? qa-question)
-      (into (prose-violations "質問の記録" qa-question)))))
+      (into (prose-violations "質問の記録" qa-question))
+
+      ;; 19 — a 送達 outcome may be recorded, and a misdirection is recorded
+      ;; rather than refused: the document has already left, and refusing to
+      ;; write down where it went would destroy the evidence of the incident.
+      (= :confirm-transmission op)
+      (into (transmission/confirmation-violations
+             transmission-confirmation
+             (->> (store/transmissions-of store (:matter-id transmission-confirmation))
+                  (filter #(= (:transmission-id transmission-confirmation)
+                              (:transmission-id %)))
+                  first))))))
 
 (defn check
   "Assess `proposal` against the registered record. Pure: never mutates the

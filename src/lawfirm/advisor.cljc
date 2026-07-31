@@ -82,7 +82,7 @@
   fabricated recipient is a fabricated check."
   [:matter-id :doc-id :deadline-id :invoice-id :question-id :answer-id
    :work-product :time-entry :trust-entry :invoice :grant :conflict-check
-   :transmission :recipient :qa-question :qa-answer
+   :transmission :transmission-confirmation :recipient :qa-question :qa-answer
    :reviewed-by :reviewed-on :sent-on])
 
 (defn- carry-payload

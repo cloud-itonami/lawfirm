@@ -264,6 +264,33 @@ hold になる主なケース:
 だが、**本文は記録に載せられない**（`:digest` のみ。載せると `:prose-in-record` で hold）。
 コンソールに出る発信元は末尾4桁だけ——コンソールは共有されるものなので。
 
+### 4.1.55 送信結果の記録
+
+送達を出したら、経路が返してきた結果を記録する。**承認は不要**（結果は判断ではない）。
+
+```clojure
+(actor/run-request! g {... :op :confirm-transmission
+                       :transmission-confirmation
+                       {:transmission-id "TX-1" :matter-id "M-1"
+                        :result :ok           ; :ok / :failed / :pending
+                        :provider :dropbox-fax
+                        :provider-id "…"       ; 経路側の識別子
+                        :provider-status "S"   ; 経路が返した生の状態
+                        :dialled "03-1234-5678" ; 経路が「実際に送った先」と報告した番号
+                        :confirmed-on "2026-07-30"}} ctx "t11")
+```
+
+`:dialled` は**照合のためにある**。`transmission/direction-check` が登録済みの宛先と
+突き合わせて `:match` / `:mismatch` / `:undeterminable` を返し、`:mismatch` なら
+`:misdirected? true` が記録に載る。
+
+**誤送信でも commit される。** 書面は既に出ており、残っているのは記録を正しくすることだけ。
+hold にしたら事故の証跡が消える。コンソールには「誤送信」として赤で出る。
+
+`:undeterminable`（照合不能）は**事故ではない**。経路が宛先を報告しなかった、あるいは
+その経路に登録済みの宛先が無かった、という証跡の欠落で、別の列に数える。
+「照合していない」を「照合して問題なし」と同じに見せないため。
+
 ### 4.1.6 相談 Q&A — 回答は書面と同じはしごを通る
 
 「短いから」「メールだから」で軽い経路にしない。回答は 起案 → 弁護士精査 → 送信。

@@ -177,6 +177,111 @@
              :cite (:cite res)}))))
 
 ;; ---------------------------------------------------------------------------
+;; Confirmation — what the transport says happened
+;; ---------------------------------------------------------------------------
+
+(def results
+  "What a transport can tell us. `:pending` is a real answer and not a
+  placeholder: a fax that is still converting has not failed, and recording it
+  as failed would send someone to re-send a document that is about to arrive."
+  #{:ok :failed :pending})
+
+(defn digits
+  "A phone number reduced to its digits. Nil-safe."
+  [s]
+  (apply str (filter #(and (>= (int %) 48) (<= (int %) 57)) (str s))))
+
+(defn same-number?
+  "True when two numbers are the same line as far as this can tell.
+
+  Compares digits, and treats a Japanese international form as equal to its
+  domestic form (`+81 3-1234-5678` = `03-1234-5678`) by matching on the
+  longest common suffix once the country code and trunk prefix are removed.
+  Deliberately narrow: this exists to catch a transport that sent somewhere
+  else, not to be a phone-number library."
+  [a b]
+  (let [a (digits a) b (digits b)]
+    (boolean
+     (and (seq a) (seq b)
+          (or (= a b)
+              ;; 81xxxxxxxxx vs 0xxxxxxxxx
+              (= (subs a (min 2 (count a))) (subs b (min 1 (count b))))
+              (= (subs a (min 1 (count a))) (subs b (min 2 (count b)))))))))
+
+(defn direction-check
+  "Did the document go where the record said it should?
+
+  Returns `:match`, `:mismatch`, or **`:undeterminable`** — and the third one
+  is the reason this is a three-valued answer rather than a boolean. A
+  transport that reports no destination, or a channel with no coordinate to
+  compare against, gives us no evidence either way; answering `false` there
+  would record 'not misdirected' as a finding when nothing was checked. The
+  dangerous direction is the confident negative, so it is not available."
+  [store {:keys [recipient-id channel dialled]}]
+  (let [coord (some-> (store/recipient store recipient-id) (coordinate channel))
+        registered (:number coord)]
+    (cond
+      (or (empty? (digits dialled)) (empty? (digits registered))) :undeterminable
+      (same-number? dialled registered) :match
+      :else :mismatch)))
+
+(defn apply-confirmation
+  "The transmission as it stands after `confirmation`.
+
+  Pure — `lawfirm.actor` is the only place this reaches the record. The
+  misdirection verdict is computed here rather than supplied, so a transport
+  cannot report on itself."
+  [store transmission {:keys [result provider provider-id provider-status
+                              dialled confirmed-on page-count] :as confirmation}]
+  (let [verdict (direction-check store (merge (select-keys transmission
+                                                           [:recipient-id :channel])
+                                              (select-keys confirmation [:dialled])))]
+    (cond-> (assoc transmission
+                   :result (if (contains? results result) result :pending)
+                   :provider provider
+                   :provider-id provider-id
+                   :provider-status provider-status
+                   :dialled dialled
+                   :confirmed-on confirmed-on
+                   :direction-check verdict
+                   :misdirected? (= :mismatch verdict))
+      (number? page-count) (assoc :page-count page-count))))
+
+(defn confirmation-violations
+  "Every rule confirming a 送達 breaks. Empty means the confirmation can be
+  recorded — which is not the same as the 送達 having succeeded.
+
+  Note what is *not* here: a mismatch between the dialled number and the
+  registered one is **not** a violation. The document has already left; the
+  only thing left to get right is the record. Refusing to write down a
+  misdirection would destroy the evidence of the incident, which is the
+  opposite of what this namespace is for."
+  [{:keys [transmission-id] :as _confirmation} known]
+  (cond-> []
+    (nil? known)
+    (conj {:rule :unknown-transmission
+           :detail (str "未登録の送達 " (pr-str transmission-id) " は確認できない")})
+
+    (and known (not= :outbound (:direction known)))
+    (conj {:rule :confirmation-not-outbound
+           :detail (str "送達 " transmission-id
+                        " は受信記録。受信に送信結果は無い")})))
+
+(defn misdirected
+  "Transmissions the record believes went somewhere other than the registered
+  destination. An incident list, not a metric — one row here is a
+  confidentiality event."
+  [store matter-id]
+  (filterv :misdirected? (store/transmissions-of store matter-id)))
+
+(defn undeterminable-direction
+  "Confirmed transmissions where nothing could be compared. Not incidents —
+  gaps in the evidence, which is a different thing and has to look different."
+  [store matter-id]
+  (filterv #(= :undeterminable (:direction-check %))
+           (store/transmissions-of store matter-id)))
+
+;; ---------------------------------------------------------------------------
 ;; Inbound
 ;; ---------------------------------------------------------------------------
 

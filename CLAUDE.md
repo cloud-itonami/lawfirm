@@ -7,7 +7,7 @@
 ## 触る前に読むもの
 
 1. [`src/lawfirm/governor.cljc`](src/lawfirm/governor.cljc) の docstring —
-   18 の HARD 不変条件と 9 の必須承認操作。**このリポジトリの仕様はここにある。**
+   19 の HARD 不変条件と 9 の必須承認操作。**このリポジトリの仕様はここにある。**
 2. [`src/lawfirm/conflict.cljc`](src/lawfirm/conflict.cljc) の docstring —
    なぜ「人間の判断記録」と「本日の再スクリーン」が別々に必要なのか。
 3. [`src/lawfirm/advisor.cljc`](src/lawfirm/advisor.cljc) の `payload-keys` —
@@ -16,7 +16,7 @@
 ## 開発
 
 ```bash
-clojure -M:test              # 138 tests / 568 assertions
+clojure -M:test              # 152 tests / 609 assertions
 clojure -M:lint              # clj-kondo, errors fail, warnings 0 を維持する
 clojure -M:render-console    # docs/samples/lawyer-console.html を再生成
 ```
@@ -50,6 +50,11 @@ clojure -M:render-console    # docs/samples/lawyer-console.html を再生成
 - **送達先を「フィールド」に戻さない。** `:recipient-id` を宛先そのもの（番号・住所・
   アドレス）で置き換える変更を入れない。誤送信をコード上不可能にしているのはこの一点で、
   `workspace/dispatch-plan` が記録から番号を引き直すところまで含めて成立している。
+- **誤送信の記録を hold にしない。** `:confirm-transmission` は不一致を検出しても commit する。
+  拒否すると事故の証跡が残らない。`direction-check` の `:undeterminable` を `false` に
+  畳まない——照合していないことと、照合して問題が無かったことは別の事実。
+- **misdirection の判定を payload から受け取らない。** `transmission/apply-confirmation` が
+  記録から計算する（経路が自分について報告できてはならない）。
 - **`lawfirm.projection` に書き戻し経路を足さない。** カレンダー / ドライブ側の編集を
   記録に反映する関数を追加すると、ゲートが判定に使う値と画面の値の出所が2つになる。
 - **本文（`:body` / `:text` / `:content` / …）を記録に載せない。** `governor/prose-keys`
