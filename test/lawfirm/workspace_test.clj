@@ -122,3 +122,25 @@
                                        :direction :outbound :channel :fax
                                        :doc-id "W-9" :recipient-id "R-404"})
       (is (= :recipient-not-registered (:reason (workspace/dispatch-plan s "TX-4")))))))
+
+(deftest the-plan-carries-the-provenance-the-gate-will-demand
+  (testing "without these a host either re-derives them — and two hosts derive
+            them differently — or omits them and every confirmation is held"
+    (let [plan (workspace/dispatch-plan (fx/fresh-store) "TX-1")]
+      (is (= "C-1" (:client-id plan)))
+      (is (= "B-1" (:bengoshi-id plan)))))
+  (testing "and a confirmation built from the plan clears the gate"
+    (let [s (fx/fresh-store)
+          plan (workspace/dispatch-plan s "TX-1")
+          g (actor/build-graph {:store s})
+          result (actor/run-request!
+                  g {:op :confirm-transmission
+                     :client-id (:client-id plan)
+                     :bengoshi-id (:bengoshi-id plan)
+                     :matter-id (:matter-id plan)
+                     :transmission-confirmation
+                     {:transmission-id "TX-1" :matter-id (:matter-id plan)
+                      :result :ok :confirmed-on fx/today}}
+                  fx/context "t-plan-confirm")]
+      (is (actor/committed? result)
+          (pr-str (get-in result [:state :verdict :violations]))))))

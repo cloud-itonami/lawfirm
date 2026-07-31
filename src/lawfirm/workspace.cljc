@@ -133,6 +133,7 @@
                        (store/matters store))
                (filter #(= transmission-id (:transmission-id %)))
                first)
+        m (when t (store/matter store (:matter-id t)))
         r (when t (store/recipient store (:recipient-id t)))
         wp (when t (store/work-product store (:doc-id t)))
         coord (when r (transmission/coordinate r (:channel t)))]
@@ -146,6 +147,17 @@
       {:ok? true
        :transmission-id transmission-id
        :matter-id (:matter-id t)
+       ;; Provenance travels with the plan.
+       ;;
+       ;; A host has to run the outcome back through the gate as
+       ;; `:confirm-transmission`, and every op needs a registered client and
+       ;; an acting 弁護士 — so without these a host either re-derives them
+       ;; (and two hosts derive them differently) or omits them and every
+       ;; confirmation is held for `:no-client`. The acting counsel is the
+       ;; matter's, because the outcome belongs to the operation the same
+       ;; 弁護士 approved.
+       :client-id (:client-id m)
+       :bengoshi-id (:bengoshi-id m)
        :channel (:channel t)
        ;; From the record, never from the caller. This is the whole point.
        :recipient {:recipient-id (:recipient-id r)
