@@ -25,7 +25,7 @@
   separate, irreducible requirement rather than something this namespace could
   ever grant on its own."
   (:require [clojure.set :as set]
-            [clojure.string :as str]
+            [kotoba.lang.text :as str]
             [lawfirm.store :as store]))
 
 ;; ---------------------------------------------------------------------------
@@ -53,8 +53,8 @@
           ;; them still exist — the regex leans on word boundaries, and folding
           ;; whitespace before this step turns "acme corp." into a single token
           ;; that `\bcorp\b` can no longer see.
-          base (-> s str/trim str/lower-case (str/replace latin-affixes ""))
-          base (reduce (fn [acc affix] (str/replace acc (str/lower-case affix) ""))
+          base (-> s str/trim str/lower (str/replace latin-affixes ""))
+          base (reduce (fn [acc affix] (str/replace acc (str/lower affix) ""))
                        base corporate-affixes)
           base (-> base
                    (str/replace #"[\s　]+" "")

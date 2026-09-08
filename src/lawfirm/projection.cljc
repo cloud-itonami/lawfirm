@@ -27,7 +27,7 @@
   boundary for anyone east or west of it, which is the same class of bug
   `lawfirm.date` exists to avoid (CLAUDE.md: no `java.time`, no `js/Date`)."
   (:require [calendar.model :as calendar]
-            [clojure.string :as str]
+            [kotoba.lang.text :as str]
             [drive.model :as drive]
             [lawfirm.deadline :as deadline]
             [lawfirm.qa :as qa]

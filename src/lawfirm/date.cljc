@@ -16,7 +16,7 @@
   ISO date strings also sort lexicographically, so ordering and range
   comparisons elsewhere in the repo use plain `compare` — only *differences*
   and *offsets* need this namespace."
-  (:require [clojure.string :as str]))
+  (:require [kotoba.lang.text :as str]))
 
 (defn valid?
   "True for a syntactically well-formed ISO calendar date string."
