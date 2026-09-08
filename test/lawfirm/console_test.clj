@@ -1,5 +1,5 @@
 (ns lawfirm.console-test
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [clojure.test :refer [deftest is testing]]
             [design-quality.audit :as dq]
             [lawfirm.console :as console]

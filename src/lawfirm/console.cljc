@@ -22,7 +22,7 @@
   them to a transport is the host's job (a Worker ingress in cljs — Kotoba has
   no ingress capability today, CLAUDE.md); nothing here performs an effect."
   (:require [appkit.core :as app]
-            [clojure.string :as str]
+            [kotoba.lang.text :as str]
             [kotoba-ui.core :as ui]
             [lawfirm.conflict :as conflict]
             [lawfirm.deadline :as deadline]

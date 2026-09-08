@@ -32,7 +32,7 @@
   it returns a *low* `:confidence` and says `:source :fallback`. Downstream,
   a low-confidence triage means the matching is a suggestion for a human to
   read, not a routing decision."
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             #?(:clj  [clojure.edn :as edn]
                :cljs [cljs.reader :as edn])))
 

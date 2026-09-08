@@ -28,7 +28,7 @@
 
     {:op :effect :propose :matter-id :billable-hours :doc-id :grant
      :trust-entry :invoice-id :stake :confidence :rationale}"
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             #?(:clj  [clojure.edn :as edn]
                :cljs [cljs.reader :as edn])))
 
