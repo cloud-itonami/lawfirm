@@ -2,7 +2,7 @@
 
 `lawfirm` が単独事務所の業務基盤で終わらず、共同受任のネットワークとして機能するために、
 提携弁護士をどう集めるかの計画。ファネルの各段階は
-[`lawfirm.partner/pipeline-stages`](../src/lawfirm/partner.cljc) にコードとして存在し、
+[`lawfirm.partner/pipeline-stages`](../src/lawfirm/partner.cljk) にコードとして存在し、
 `partner/funnel` と `partner/blocked-at` で計測する。**計測されない獲得計画は願望**なので、
 本書の数値目標はすべて `funnel` が返す値に対応させてある。
 
