@@ -388,8 +388,8 @@ hold にしたら事故の証跡が消える。コンソールには「誤送信
 ## 6. コンソール
 
 ```bash
-clojure -M:render-console            # docs/samples/lawyer-console.html
-clojure -M:render-console out.html
+kbb -M:render-console            # docs/samples/lawyer-console.html
+kbb -M:render-console out.html
 ```
 
 画面に出る数字は、すべて governor が判定に使うのと**同じ関数**から読んでいる

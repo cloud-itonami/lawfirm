@@ -13,7 +13,7 @@
   against the same seed. Verify by diffing two consecutive runs before
   shipping.
 
-  `clojure -M:render-console [out-file]`"
+  `kbb -M:render-console [out-file]`"
   (:require [clojure.java.io :as io]
             [lawfirm.actor :as actor]
             [lawfirm.console :as console]

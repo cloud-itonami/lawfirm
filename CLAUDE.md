@@ -16,9 +16,9 @@
 ## 開発
 
 ```bash
-clojure -M:test              # 152 tests / 609 assertions
-clojure -M:lint              # clj-kondo, errors fail, warnings 0 を維持する
-clojure -M:render-console    # docs/samples/lawyer-console.html を再生成
+kbb -M:test              # 152 tests / 609 assertions
+kbb -M:lint              # clj-kondo, errors fail, warnings 0 を維持する
+kbb -M:render-console    # docs/samples/lawyer-console.html を再生成
 ```
 
 - コンソールは design-quality の決定論的 HIG/WCAG 監査で **100.00** を維持する
