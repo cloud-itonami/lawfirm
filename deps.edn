@@ -74,6 +74,6 @@
                        :git/sha "fb766e2f79c088de05e289554c9de049e7909bd3"}}
          :main-opts ["-m" "cognitect.test-runner"]}
 
-  ;; clojure -M:render-console [out-file] -> docs/samples/lawyer-console.html
+  ;; kbb -M:render-console [out-file] -> docs/samples/lawyer-console.html
   ;; Drives the REAL actor stack; no invented numbers.
   :render-console {:main-opts ["-m" "lawfirm.render-console"]}}}

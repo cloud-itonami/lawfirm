@@ -4,8 +4,8 @@
 langgraph StateGraph の governed actor（`LawFirmAdvisor ⊣ LawFirmGovernor`）として実装し、
 台帳は commit も hold も両方積む append-only。
 
-**成熟度: `:implemented`.** 152 tests / 609 assertions green（`clojure -M:test`）、
-`clojure -M:lint` warnings 0、レンダリング済みコンソールは
+**成熟度: `:implemented`.** 152 tests / 609 assertions green（`kbb -M:test`）、
+`kbb -M:lint` warnings 0、レンダリング済みコンソールは
 [design-quality](https://github.com/kotoba-lang/design-quality) の決定論的
 HIG/WCAG 監査で **100.00 / 100**。
 
@@ -121,9 +121,9 @@ HIG/WCAG 監査で **100.00 / 100**。
 ## 使う
 
 ```bash
-clojure -M:test              # 152 tests / 609 assertions
-clojure -M:lint              # clj-kondo, errors fail
-clojure -M:render-console    # docs/samples/lawyer-console.html を再生成
+kbb -M:test              # 152 tests / 609 assertions
+kbb -M:lint              # clj-kondo, errors fail
+kbb -M:render-console    # docs/samples/lawyer-console.html を再生成
 ```
 
 コンソールに出る数字は、すべて governor が判定に使うのと同じ関数から読んでいる
