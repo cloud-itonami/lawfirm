@@ -32,21 +32,21 @@ HIG/WCAG 監査で **100.00 / 100**。
 
 | namespace | 役割 |
 |---|---|
-| [`lawfirm.store`](src/lawfirm/store.cljc) | 記録層の SSoT。弁護士・依頼者・事件・利益相反・期限・時間・預り金・請求・書面・共同受任 grant・送達先・送達・相談Q&A・台帳。`mem-store` と `durable-store` の2実装が**同じ純関数群に委譲**するので乖離しない |
-| [`lawfirm.conflict`](src/lawfirm/conflict.cljc) | 利益相反スクリーン（職務基本規程27条・28条の7類型） |
-| [`lawfirm.deadline`](src/lawfirm/deadline.cljc) | 期限管理。民法140条 初日不算入 / 143条 暦計算 / 142条 休日繰越、条文付きの法定期間表 |
-| [`lawfirm.trust`](src/lawfirm/trust.cljc) | 預り金の分別管理（日弁連 預り金等の取扱いに関する規程） |
-| [`lawfirm.partner`](src/lawfirm/partner.cljc) | 提携弁護士。資格確認・適合度マッチング・共同受任 grant・獲得ファネル |
-| [`lawfirm.transmission`](src/lawfirm/transmission.cljc) | 送達（FAX・郵便・メール・持参・電子提出）。**宛先は事前登録された recipient からしか選べない** — 誤送信の構造的封じ込め |
-| [`lawfirm.qa`](src/lawfirm/qa.cljc) | 相談 Q&A。回答は書面と同じ draft → 弁護士精査 → 送信のはしごを通る |
-| [`lawfirm.projection`](src/lawfirm/projection.cljc) | 記録 → workspace 型（`calendar.model` / `drive.model`）とポータル向け summary への**一方向**投影 |
-| [`lawfirm.workspace`](src/lawfirm/workspace.cljc) | host が実装する port（inbox / drive / calendar / 送信ゲートウェイ）と、到着物を actor の **request** に変える入口 |
-| [`lawfirm.intake`](src/lawfirm/intake.cljc) | 相談受付のトリアージ。本文は記録に載せない |
-| [`lawfirm.advisor`](src/lawfirm/advisor.cljc) | LLM を封じ込める唯一のノード。提案しか返さない |
-| [`lawfirm.governor`](src/lawfirm/governor.cljc) | ゲート。19 の HARD 不変条件 + 9 の必須承認操作。verdict 組み立てと provenance 4規則は [`kotoba-lang/governor`](https://github.com/kotoba-lang/governor) を使う（fleet で 376 repo に手で複製され、1件が乖離していた層 — ADR-2607309100） |
-| [`lawfirm.actor`](src/lawfirm/actor.cljc) | StateGraph。`intake → advise → govern → decide → commit \| request-approval \| hold` |
-| [`lawfirm.console`](src/lawfirm/console.cljc) | 弁護士コンソール（kotoba-ui、pure `.cljc` hiccup、SSR） |
-| [`lawfirm.demo`](src/lawfirm/demo.cljc) | サンプル事務所。テストとデモページが**同じ記録**を使う |
+| [`lawfirm.store`](src/lawfirm/store.cljk) | 記録層の SSoT。弁護士・依頼者・事件・利益相反・期限・時間・預り金・請求・書面・共同受任 grant・送達先・送達・相談Q&A・台帳。`mem-store` と `durable-store` の2実装が**同じ純関数群に委譲**するので乖離しない |
+| [`lawfirm.conflict`](src/lawfirm/conflict.cljk) | 利益相反スクリーン（職務基本規程27条・28条の7類型） |
+| [`lawfirm.deadline`](src/lawfirm/deadline.cljk) | 期限管理。民法140条 初日不算入 / 143条 暦計算 / 142条 休日繰越、条文付きの法定期間表 |
+| [`lawfirm.trust`](src/lawfirm/trust.cljk) | 預り金の分別管理（日弁連 預り金等の取扱いに関する規程） |
+| [`lawfirm.partner`](src/lawfirm/partner.cljk) | 提携弁護士。資格確認・適合度マッチング・共同受任 grant・獲得ファネル |
+| [`lawfirm.transmission`](src/lawfirm/transmission.cljk) | 送達（FAX・郵便・メール・持参・電子提出）。**宛先は事前登録された recipient からしか選べない** — 誤送信の構造的封じ込め |
+| [`lawfirm.qa`](src/lawfirm/qa.cljk) | 相談 Q&A。回答は書面と同じ draft → 弁護士精査 → 送信のはしごを通る |
+| [`lawfirm.projection`](src/lawfirm/projection.cljk) | 記録 → workspace 型（`calendar.model` / `drive.model`）とポータル向け summary への**一方向**投影 |
+| [`lawfirm.workspace`](src/lawfirm/workspace.cljk) | host が実装する port（inbox / drive / calendar / 送信ゲートウェイ）と、到着物を actor の **request** に変える入口 |
+| [`lawfirm.intake`](src/lawfirm/intake.cljk) | 相談受付のトリアージ。本文は記録に載せない |
+| [`lawfirm.advisor`](src/lawfirm/advisor.cljk) | LLM を封じ込める唯一のノード。提案しか返さない |
+| [`lawfirm.governor`](src/lawfirm/governor.cljk) | ゲート。19 の HARD 不変条件 + 9 の必須承認操作。verdict 組み立てと provenance 4規則は [`kotoba-lang/governor`](https://github.com/kotoba-lang/governor) を使う（fleet で 376 repo に手で複製され、1件が乖離していた層 — ADR-2607309100） |
+| [`lawfirm.actor`](src/lawfirm/actor.cljk) | StateGraph。`intake → advise → govern → decide → commit \| request-approval \| hold` |
+| [`lawfirm.console`](src/lawfirm/console.cljk) | 弁護士コンソール（kotoba-ui、pure `.cljc` hiccup、SSR） |
+| [`lawfirm.demo`](src/lawfirm/demo.cljk) | サンプル事務所。テストとデモページが**同じ記録**を使う |
 
 ```text
 :intake -> :advise -> :govern -> :decide -+-> :commit           (:ok?)

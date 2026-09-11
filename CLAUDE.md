@@ -6,11 +6,11 @@
 
 ## 触る前に読むもの
 
-1. [`src/lawfirm/governor.cljc`](src/lawfirm/governor.cljc) の docstring —
+1. [`src/lawfirm/governor.cljk`](src/lawfirm/governor.cljk) の docstring —
    19 の HARD 不変条件と 9 の必須承認操作。**このリポジトリの仕様はここにある。**
-2. [`src/lawfirm/conflict.cljc`](src/lawfirm/conflict.cljc) の docstring —
+2. [`src/lawfirm/conflict.cljk`](src/lawfirm/conflict.cljk) の docstring —
    なぜ「人間の判断記録」と「本日の再スクリーン」が別々に必要なのか。
-3. [`src/lawfirm/advisor.cljc`](src/lawfirm/advisor.cljc) の `payload-keys` —
+3. [`src/lawfirm/advisor.cljk`](src/lawfirm/advisor.cljk) の `payload-keys` —
    モデルが作れないものの一覧と、その理由。
 
 ## 開発

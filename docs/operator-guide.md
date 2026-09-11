@@ -89,7 +89,7 @@
 ;;     :screened-parties [...]}
 ```
 
-検出される類型と根拠条文は [`lawfirm.conflict/screen`](../src/lawfirm/conflict.cljc)
+検出される類型と根拠条文は [`lawfirm.conflict/screen`](../src/lawfirm/conflict.cljk)
 の docstring に一覧がある（27条1号・2号・3号、28条2号・3号・4号、共同受任先の抵触）。
 
 > **スクリーンが clean であることは必要条件であって十分条件ではない。**
