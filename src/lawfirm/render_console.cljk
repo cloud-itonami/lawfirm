@@ -14,7 +14,7 @@
   shipping.
 
   `kbb -M:render-console [out-file]`"
-  (:require [clojure.java.io :as io]
+  (:require [kotoba.io :as io]
             [lawfirm.actor :as actor]
             [lawfirm.console :as console]
             [lawfirm.demo :as demo]

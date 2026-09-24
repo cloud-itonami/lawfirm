@@ -25,7 +25,7 @@
   with a role. The distinction between a fee split and a referral fee is
   whether the recipient did legal work. `fee-split-violations` enforces
   exactly that."
-  (:require [clojure.set :as set]
+  (:require [kotoba.lang.coll :as set]
             [lawfirm.conflict :as conflict]
             [lawfirm.date :as date]
             [lawfirm.store :as store]))
