@@ -29,7 +29,7 @@
     {:op :effect :propose :matter-id :billable-hours :doc-id :grant
      :trust-entry :invoice-id :stake :confidence :rationale}"
   (:require [kotoba.lang.text :as str]
-            #?(:clj  [clojure.edn :as edn]
+            #?(:clj  [kotoba.lang.edn :as edn]
                :cljs [cljs.reader :as edn])))
 
 (defprotocol Advisor
