@@ -1,5 +1,5 @@
 (ns lawfirm.governor-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [governor.core :as gov]
             [lawfirm.fixture :as fx]
             [lawfirm.governor :as governor]

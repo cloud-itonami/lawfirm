@@ -1,6 +1,6 @@
 (ns lawfirm.projection-test
   (:require [calendar.model :as calendar]
-            [clojure.test :refer [deftest is testing]]
+            [kotoba.test :refer [deftest is testing]]
             [drive.model :as drive]
             [lawfirm.deadline :as deadline]
             [lawfirm.fixture :as fx]

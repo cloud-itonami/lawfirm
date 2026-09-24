@@ -1,5 +1,5 @@
 (ns lawfirm.qa-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [lawfirm.fixture :as fx]
             [lawfirm.governor :as governor]
             [lawfirm.qa :as qa]

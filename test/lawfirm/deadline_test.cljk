@@ -1,5 +1,5 @@
 (ns lawfirm.deadline-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [lawfirm.deadline :as deadline]
             [lawfirm.fixture :as fx]
             [lawfirm.store :as store]))
