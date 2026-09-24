@@ -1,5 +1,5 @@
 (ns lawfirm.date-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [lawfirm.date :as date]))
 
 (deftest epoch-roundtrip

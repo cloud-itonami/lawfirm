@@ -1,6 +1,6 @@
 (ns lawfirm.intake-test
   (:require [kotoba.lang.text :as str]
-            [clojure.test :refer [deftest is testing]]
+            [kotoba.test :refer [deftest is testing]]
             [lawfirm.conflict :as conflict]
             [lawfirm.fixture :as fx]
             [lawfirm.intake :as intake]

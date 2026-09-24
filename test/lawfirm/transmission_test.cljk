@@ -1,5 +1,5 @@
 (ns lawfirm.transmission-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [lawfirm.actor :as actor]
             [lawfirm.fixture :as fx]
             [lawfirm.governor :as governor]

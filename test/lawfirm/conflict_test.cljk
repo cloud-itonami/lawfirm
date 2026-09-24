@@ -1,5 +1,5 @@
 (ns lawfirm.conflict-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [lawfirm.conflict :as conflict]
             [lawfirm.fixture :as fx]
             [lawfirm.store :as store]))

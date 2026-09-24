@@ -1,5 +1,5 @@
 (ns lawfirm.store-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [lawfirm.demo :as demo]
             [lawfirm.store :as store]))
 
