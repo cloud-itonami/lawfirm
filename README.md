@@ -137,7 +137,7 @@ kbb -M:render-console    # docs/samples/lawyer-console.html を再生成
 
 ## 設計上の選択
 
-- **`.cljc`。** JVM 依存を持たない（CLAUDE.md の runtime 優先順位）。期限計算に
+- **`.cljc`。** JVM 依存を持たない（AGENTS.md の runtime 優先順位）。期限計算に
   `java.time` を使わないのもこの理由で、`lawfirm.date` は Howard Hinnant の
   `days_from_civil` を整数演算で持っている。`js/Date` はタイムゾーンを持つ時刻であって、
   出訴期限はどちらでもない。
@@ -167,9 +167,9 @@ kbb -M:render-console    # docs/samples/lawyer-console.html を再生成
    一件記録が大きくなると1操作あたりのコストが線形に増える。プロトコル境界があるので、
    本物の entity store への差し替えは `lawfirm.store` より上を変えない。
    `persist!` はこの名前空間が host に触れる唯一の場所で、`slurp`/`spit` は入れない
-   （`.cljc` の可搬性 — CLAUDE.md の runtime 優先順位）。
+   （`.cljc` の可搬性 — AGENTS.md の runtime 優先順位）。
 4. **HTTP の入口は無い。** Kotoba には現時点で ingress capability が無いため
-   （CLAUDE.md）、Worker のエントリポイントは cljs 側の責務。
+   （AGENTS.md）、Worker のエントリポイントは cljs 側の責務。
 5. **コンソールの `:act` ボタンは何もしない。** SSR の意味論しか持たない。
    トランスポートへの結線はホストの仕事。
 6. **送達経路の制約表（`transmission/channel-restrictions`）も起案の補助であって

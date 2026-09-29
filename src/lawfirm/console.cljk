@@ -20,7 +20,7 @@
 
   Actions render as `:act` buttons with no client behaviour attached. Wiring
   them to a transport is the host's job (a Worker ingress in cljs — Kotoba has
-  no ingress capability today, CLAUDE.md); nothing here performs an effect."
+  no ingress capability today, AGENTS.md); nothing here performs an effect."
   (:require [appkit.core :as app]
             [kotoba.lang.text :as str]
             [kotoba-ui.core :as ui]

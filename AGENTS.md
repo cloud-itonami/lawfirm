@@ -1,4 +1,4 @@
-# CLAUDE.md — lawfirm
+# AGENTS.md — lawfirm
 
 法律事務所 practice OS。**正典実装は `src/lawfirm/**` の `.cljc`**。
 概要は [`README.md`](README.md)、実務手順は [`docs/operator-guide.md`](docs/operator-guide.md)、
@@ -64,7 +64,7 @@ kbb -M:render-console    # docs/samples/lawyer-console.html を再生成
   `the-two-implementations-cannot-drift` が両者の全読み取りを突き合わせている）。
 - **モデル名を焼かない。** `advisor/resolve-model` の解決順（明示 → `murakumo-main`
   alias → endpoint のみ）を迂回しない（ADR-2607173100）。
-- **`bb.edn` / `.sh` を新規に置かない**（ADR-2607173000、CLAUDE.md repo-wide）。
+- **`bb.edn` / `.sh` を新規に置かない**（ADR-2607173000、AGENTS.md repo-wide）。
   スクリプトが要るなら nbb。
 
 ## テストの約束
