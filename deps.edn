@@ -1,7 +1,7 @@
 {:paths ["src"]
 
  ;; langgraph carries the StateGraph runtime + checkpointer the actor pattern
- ;; is built on (CLAUDE.md Actors section).
+ ;; is built on (AGENTS.md Actors section).
  ;;
  ;; The kotoba-ui stack is the console's only UI dependency (skill
  ;; kotoba-uiux / ADR-2607122200): the app requires `kotoba-ui.core` and

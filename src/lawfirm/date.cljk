@@ -2,7 +2,7 @@
   "Portable civil-date arithmetic over ISO `\"YYYY-MM-DD\"` strings.
 
   Deliberately hand-rolled integer math rather than `java.time`: every other
-  namespace in this repo is `.cljc` that must run on the runtimes CLAUDE.md
+  namespace in this repo is `.cljc` that must run on the runtimes AGENTS.md
   ranks above the JVM (kotoba wasm > clojurewasm > ClojureScript > nbb), and a
   `#?(:clj java.time :cljs js/Date)` split in the middle of 期限 math is
   exactly where a JVM-only assumption would hide. `js/Date` is also wrong for

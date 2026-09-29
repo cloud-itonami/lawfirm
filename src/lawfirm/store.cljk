@@ -1,7 +1,7 @@
 (ns lawfirm.store
   "SSoT for the lawfirm practice OS — the record layer a licensed 弁護士
   actually runs a practice on (itonami actor pattern, ADR-2607011000 /
-  CLAUDE.md Actors section). Modeled on cloud-itonami-isco-2611's
+  AGENTS.md Actors section). Modeled on cloud-itonami-isco-2611's
   `legalpractice.store`, widened from a single-operation demo to the
   entities a real 受任→終結 lifecycle needs.
 
@@ -424,7 +424,7 @@
   is `(fn [db] ...)` and is the **only** place this namespace touches a host.
   There is no `slurp`/`spit` here and there will not be: this file is `.cljc`
   and a record layer that reached for a filesystem would stop running in the
-  runtimes above the JVM in the workspace's priority order (CLAUDE.md).
+  runtimes above the JVM in the workspace's priority order (AGENTS.md).
 
   What this does *not* do is pretend to be a database. `persist!` receives the
   whole db, so a practice with a large 一件記録 pays a full write per

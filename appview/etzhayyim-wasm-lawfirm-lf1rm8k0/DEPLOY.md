@@ -90,7 +90,7 @@ Phase A lifetime — any enum additions since A are additive).
   migration is applied *and* at least one invoice / conflictCheck record has
   been written (atrecord tables created lazily).
 - **RisingWave MV creation via wrangler dev** is untested; apply migrations
-  against the production cluster only (see graph-schema CLAUDE.md §How to Add
+  against the production cluster only (see graph-schema AGENTS.md §How to Add
   a New Table).
 - **Cross-firm external counsel flow** requires the external bengoshi to hold
   their own `etzhayyim auth login` session — cannot be simulated from a single

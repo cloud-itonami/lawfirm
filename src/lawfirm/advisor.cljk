@@ -19,7 +19,7 @@
 
   ## Model selection
 
-  Per CLAUDE.md (ADR-2607173100) no concrete model id is baked in. Resolution
+  Per AGENTS.md (ADR-2607173100) no concrete model id is baked in. Resolution
   order is: explicit `:model` option → the fleet alias `murakumo-main` → the
   endpoint alone (whatever that endpoint currently serves). A hardcoded model
   name would pin this practice to a model generation and silently rot.

@@ -25,7 +25,7 @@
   projection emits `:due-on` verbatim and marks the event `:all-day? true`.
   A host that converts these to instants will move deadlines across a date
   boundary for anyone east or west of it, which is the same class of bug
-  `lawfirm.date` exists to avoid (CLAUDE.md: no `java.time`, no `js/Date`)."
+  `lawfirm.date` exists to avoid (AGENTS.md: no `java.time`, no `js/Date`)."
   (:require [calendar.model :as calendar]
             [kotoba.lang.text :as str]
             [drive.model :as drive]

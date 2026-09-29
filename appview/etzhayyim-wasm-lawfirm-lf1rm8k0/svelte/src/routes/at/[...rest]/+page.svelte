@@ -4,7 +4,7 @@
   import { goto } from "$app/navigation";
 
   /**
-   * Deep-link handler per 60-apps/CLAUDE.md §AT URI Deep-Link Routing.
+   * Deep-link handler per 60-apps/AGENTS.md §AT URI Deep-Link Routing.
    * /at/{authority}/{collection}/{rkey}  ⇔  at://{authority}/{collection}/{rkey}
    * For lawfirm records we rewrite to the matter detail route.
    */

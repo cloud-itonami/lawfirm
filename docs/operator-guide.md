@@ -432,7 +432,7 @@ kbb -M:render-console out.html
 ```
 
 `persist!` はこの記録層が host に触れる唯一の場所。`.cljc` の可搬性のため
-`slurp`/`spit` は入れていない（CLAUDE.md の runtime 優先順位）。
+`slurp`/`spit` は入れていない（AGENTS.md の runtime 優先順位）。
 書き込みごとに db 全体を渡すので、一件記録が大きくなればコストは線形に増える。
 本物の entity store（`langchain-store` の entity-store パターン）への差し替えは
 `lawfirm.store` より上を変えない。
@@ -456,4 +456,4 @@ host に順不同で届きうるのは host しか知らないので、その判
   半端な plan を返すと host が手元の何かでフォールバックしうる。
 
 HTTP の入口（Worker ingress）は cljs 側の責務。Kotoba には現時点で
-ingress capability がないため（CLAUDE.md）、エントリポイントは cljs のままにする。
+ingress capability がないため（AGENTS.md）、エントリポイントは cljs のままにする。
